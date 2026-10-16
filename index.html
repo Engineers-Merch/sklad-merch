@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sklad merchandisingu — Engineers Prague</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+/* ===================================================================
+   KLUBOVÉ BARVY — stačí přepsat tyto tři hodnoty
+   =================================================================== */
+:root{
+  --brand:#0f2a4a;          /* hlavní tmavá (hlavička) */
+  --brand-light:#1c4172;
+  --accent:#c8102e;         /* zvýrazňovací barva */
+  --bg:#f3f5f8;
+  --card:#ffffff;
+  --line:#e2e7ee;
+  --text:#17202b;
+  --muted:#6b7a90;
+  --ok:#157f47;
+  --warn:#b4690e;
+  --warn-bg:#fff6e6;
+  --danger:#b3261e;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(16,32,56,.06),0 4px 14px rgba(16,32,56,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+a{color:var(--brand-light)}
+
+/* ---------- hlavička ---------- */
+header{background:var(--brand);color:#fff}
+.head-in{max-width:1400px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:11px;margin-right:auto}
+.logo-mark{width:34px;height:34px;border-radius:8px;background:var(--accent);display:grid;place-items:center;font-weight:800;font-size:15px;flex:none}
+.logo h1{font-size:16px;line-height:1.2}
+.logo span{display:block;font-size:12px;font-weight:400;opacity:.72}
+.badge{font-size:12px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.14);display:inline-flex;align-items:center;gap:6px}
+.badge.live{background:rgba(255,255,255,.14)}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:#7ee2a8}
+
+/* ---------- záložky ---------- */
+nav{background:var(--brand-light)}
+.nav-in{max-width:1400px;margin:0 auto;padding:0 20px;display:flex;gap:2px;overflow-x:auto}
+.tab{background:none;border:0;color:rgba(255,255,255,.75);padding:11px 16px;font-size:14px;font-weight:550;
+     cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;font-family:inherit}
+.tab:hover{color:#fff}
+.tab.active{color:#fff;border-bottom-color:var(--accent)}
+
+/* ---------- layout ---------- */
+main{max-width:1400px;margin:0 auto;padding:20px}
+.view{display:none}
+.view.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.spacer{flex:1 1 auto}
+
+/* ---------- ovládací prvky ---------- */
+button,.btn{font-family:inherit;font-size:14px;border-radius:8px;border:1px solid var(--line);
+  background:#fff;color:var(--text);padding:8px 14px;cursor:pointer;font-weight:550;transition:.12s}
+button:hover{background:#f7f9fc}
+.btn-primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn-primary:hover{background:var(--brand-light)}
+.btn-accent{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-accent:hover{filter:brightness(1.08)}
+.btn-ghost{background:transparent;border-color:rgba(255,255,255,.3);color:#fff}
+.btn-ghost:hover{background:rgba(255,255,255,.12)}
+.btn-sm{padding:4px 9px;font-size:13px}
+.btn-danger{color:var(--danger);border-color:#f0cfcc}
+.btn-danger:hover{background:#fdf2f1}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{font-family:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);
+  border-radius:8px;background:#fff;color:var(--text);width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--brand-light);outline-offset:-1px;border-color:var(--brand-light)}
+textarea{min-height:68px;resize:vertical}
+label.fld{display:block;margin-bottom:12px}
+label.fld>span{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px}
+.search{max-width:280px}
+.sel{max-width:190px}
+
+/* ---------- tabulka ---------- */
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+   font-weight:700;padding:10px 12px;border-bottom:1px solid var(--line);background:#fafbfd;white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+.tbl-wrap{overflow-x:auto;border-radius:var(--radius)}
+
+/* řádek položky (hlavička skupiny) */
+tr.item-head td{background:#f7f9fc;border-top:1px solid var(--line);padding:10px 12px}
+.item-title{display:flex;align-items:center;gap:11px}
+.thumb{width:40px;height:40px;border-radius:7px;object-fit:cover;background:#e8edf4;flex:none;border:1px solid var(--line)}
+.thumb-ph{width:40px;height:40px;border-radius:7px;background:#e8edf4;display:grid;place-items:center;color:#9fb0c6;font-size:16px;flex:none}
+.item-title b{font-size:14.5px}
+.item-meta{font-size:12px;color:var(--muted)}
+.var-label{font-weight:600;padding-left:52px}
+
+/* buňky množství */
+.qty{display:inline-block;min-width:30px;text-align:right;font-variant-numeric:tabular-nums}
+.qty-btn{border:1px solid transparent;background:transparent;padding:3px 8px;border-radius:6px;
+  font-variant-numeric:tabular-nums;font-weight:600;min-width:40px;text-align:right}
+.qty-btn:hover{border-color:var(--line);background:#fff}
+.qty-0{color:#b6c0ce;font-weight:400}
+.total{font-weight:700}
+.low{color:var(--warn);font-weight:700}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px}
+.pill-warn{background:var(--warn-bg);color:var(--warn)}
+.pill-ok{background:#eaf6ef;color:var(--ok)}
+.pill-grey{background:#eef1f6;color:var(--muted)}
+
+/* ---------- přehledové dlaždice ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:13px 15px;box-shadow:var(--shadow)}
+.stat .k{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700}
+.stat .v{font-size:23px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
+.stat .s{font-size:12px;color:var(--muted)}
+
+/* ---------- upozornění ---------- */
+.alert{border-radius:var(--radius);padding:11px 15px;margin-bottom:16px;font-size:14px;border:1px solid}
+.alert-warn{background:var(--warn-bg);border-color:#f3dfb8;color:#7a4a08}
+.alert-info{background:#eef4fd;border-color:#cfe0f7;color:#19406e}
+.alert-err{background:#fdf2f1;border-color:#f3cfcb;color:#8c1f18}
+
+/* ---------- modál ---------- */
+.overlay{position:fixed;inset:0;background:rgba(13,24,40,.45);
+  display:none;align-items:flex-start;justify-content:center;padding:28px 16px;overflow-y:auto;z-index:50}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:14px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(10,20,40,.3);animation:pop .14s ease-out}
+.modal.wide{max-width:760px}
+@keyframes pop{from{transform:translateY(-8px);opacity:0}to{transform:none;opacity:1}}
+.modal-h{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.modal-h h3{font-size:16px;flex:1}
+.modal-b{padding:18px 20px;max-height:66vh;overflow-y:auto}
+.modal-f{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.x{border:0;background:none;font-size:22px;line-height:1;color:var(--muted);padding:0 4px;cursor:pointer}
+
+/* ---------- varianty v editaci položky ---------- */
+.var-row{display:grid;grid-template-columns:1fr 1fr 110px 36px;gap:8px;margin-bottom:8px;align-items:center}
+.var-row .hd{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase}
+
+/* ---------- dodavatelé ---------- */
+.sup-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px}
+.sup{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:15px;box-shadow:var(--shadow)}
+.sup h4{margin:0 0 2px;font-size:15px}
+.sup .cat{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+.sup dl{margin:11px 0 0;font-size:13.5px;display:grid;grid-template-columns:78px 1fr;gap:3px 8px}
+.sup dt{color:var(--muted)}
+.sup dd{margin:0;overflow-wrap:anywhere}
+.sup .acts{margin-top:12px;display:flex;gap:7px}
+
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty .ico{font-size:34px;margin-bottom:8px}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+.hide{display:none !important}
+footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);font-size:12.5px}
+
+/* ---------- toast ---------- */
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(90px);background:#17202b;color:#fff;
+  padding:11px 20px;border-radius:999px;font-size:14px;box-shadow:0 8px 26px rgba(0,0,0,.26);transition:.2s;z-index:100;opacity:0}
+#toast.show{transform:translateX(-50%);opacity:1}
+#toast.err{background:var(--danger)}
+
+@media (max-width:720px){
+  .row2,.row3{grid-template-columns:1fr}
+  .search,.sel{max-width:none;flex:1 1 100%}
+  .var-label{padding-left:14px}
+  main{padding:14px}
+}
+@media print{
+  nav,.toolbar,footer,.acts,.overlay,#lowAlert,.badge,#btnLogin,#btnLogout{display:none !important}
+  body{background:#fff;font-size:12px}
+  header{background:#fff;color:var(--text);border-bottom:2px solid var(--brand)}
+  .logo-mark{background:var(--brand)}
+  .card,.stat{box-shadow:none;break-inside:avoid}
+  .qty-btn{border:0;background:none}
+  tr{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= OBRAZOVKA NASTAVENÍ ======================= -->
+<div id="setup" class="hide" style="max-width:620px;margin:60px auto;padding:0 18px">
+  <div class="card" style="padding:26px">
+    <h2 style="margin-bottom:6px">Připojení k databázi</h2>
+    <p class="muted small" style="margin-top:0">
+      Aplikace zatím nemá vyplněné připojení k Supabase. Údaje najdete v Supabase v sekci
+      <b>Project Settings → API</b>. Zadané hodnoty se uloží jen do tohoto prohlížeče —
+      pro ostrý provoz je vepište přímo do souboru <code>index.html</code> (blok CONFIG).
+    </p>
+    <label class="fld"><span>Project URL</span>
+      <input id="cfgUrl" placeholder="https://xxxxxxxx.supabase.co"></label>
+    <label class="fld"><span>Anon public key</span>
+      <input id="cfgKey" placeholder="eyJhbGciOi..."></label>
+    <button class="btn-primary" id="cfgSave">Uložit a spustit</button>
+  </div>
+</div>
+
+<!-- ============================ APLIKACE ============================ -->
+<div id="app" class="hide">
+
+<header>
+  <div class="head-in">
+    <div class="logo">
+      <div class="logo-mark">EP</div>
+      <div>
+        <h1>Sklad merchandisingu</h1>
+        <span id="clubName">ČVUT Engineers Prague</span>
+      </div>
+    </div>
+    <span class="badge" id="roleBadge"><span class="dot"></span><span id="roleText">Režim prohlížení</span></span>
+    <button class="btn-ghost" id="btnLogin">Přihlásit se</button>
+    <button class="btn-ghost hide" id="btnAccount">Můj účet</button>
+    <button class="btn-ghost hide" id="btnLogout">Odhlásit</button>
+  </div>
+</header>
+
+<nav>
+  <div class="nav-in">
+    <button class="tab active" data-tab="stock">Skladové zásoby</button>
+    <button class="tab" data-tab="moves">Historie pohybů</button>
+    <button class="tab" data-tab="suppliers">Seznam dodavatelů</button>
+    <button class="tab" data-tab="places">Místa</button>
+    <button class="tab hide" data-tab="users">Uživatelé</button>
+  </div>
+</nav>
+
+<main>
+  <div id="globalErr" class="alert alert-err hide"></div>
+  <div id="noProfile" class="alert alert-warn hide">
+    Váš účet zatím nemá v systému přidělený přístup, nebo byl deaktivován.
+    Požádejte správce skladu, aby vás aktivoval na záložce <b>Uživatelé</b>.
+  </div>
+  <div id="namePrompt" class="alert alert-info hide">
+    Nemáte vyplněné celé jméno — u zapsaných pohybů se pak zobrazuje jen část e-mailu.
+    <button class="btn-sm" id="npFix" style="margin-left:8px">Doplnit jméno</button>
+  </div>
+
+  <!-- ----------------------- SKLADOVÉ ZÁSOBY ----------------------- -->
+  <section class="view active" id="view-stock">
+    <div class="stats" id="stats"></div>
+    <div id="lowAlert" class="alert alert-warn hide"></div>
+
+    <div class="toolbar">
+      <input class="search" id="q" placeholder="Hledat položku, variantu, kód…">
+      <select class="sel" id="fLoc"><option value="all">Všechna místa</option></select>
+      <select class="sel" id="fCat"><option value="all">Všechny kategorie</option></select>
+      <label class="small muted" style="display:flex;align-items:center;gap:6px;width:auto">
+        <input type="checkbox" id="fLow" style="width:auto"> jen docházející</label>
+      <span class="spacer"></span>
+      <button id="btnCsv" class="btn-sm">Export CSV</button>
+      <button id="btnPrint" class="btn-sm">Tisk</button>
+      <button id="btnNewItem" class="btn-accent hide">+ Nová položka</button>
+    </div>
+
+    <div class="card tbl-wrap">
+      <table id="tblStock"><thead id="theadStock"></thead><tbody id="tbodyStock"></tbody></table>
+    </div>
+    <p class="small muted" style="margin-top:10px" id="stockHint"></p>
+  </section>
+
+  <!-- ------------------------ HISTORIE POHYBŮ ---------------------- -->
+  <section class="view" id="view-moves">
+    <div id="mvLocked" class="alert alert-ifo hide">
+      Historie pohybů je vedena jmenovitě, a proto je přístupná až po přihlášení.
+    </div>
+    <div id="mvPanel">
+    <div class="toolbar">
+      <input class="search" id="qm" placeholder="Hledat v pohybech…">
+      <select class="sel" id="fType">
+        <option value="all">Všechny typy</option>
+        <option value="in">Naskladnění</option>
+        <option value="out">Výdej / prodej</option>
+        <option value="move">Přesun</option>
+        <option value="adjust">Korekce inventury</option>
+      </select>
+      <span class="spacer"></span>
+      <button id="btnCsvMoves" class="btn-sm">Export CSV</button>
+    </div>
+    <div class="card tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Datum a čas</th><th>Položka</th><th>Varianta</th><th>Pohyb</th>
+          <th class="num">Množství</th><th>Odkud → kam</th><th>Poznámka</th><th>Zadal</th>
+        </tr></thead>
+        <tbody id="tbodyMoves"></tbody>
+      </table>
+    </div>
+    </div>
+  </section>
+
+  <!-- ------------------------- DODAVATELÉ -------------------------- -->
+  <section class="view" id="view-suppliers">
+    <div id="supLocked" class="alert alert-info hide">
+      Seznam dodavatelů obsahuje kontaktní údaje, a proto je přístupný až po přihlášení.
+    </div>
+    <div id="supPanel" class="hide">
+      <div class="toolbar">
+        <input class="search" id="qs" placeholder="Hledat dodavatele…">
+        <span class="spacer"></span>
+        <button id="btnNewSup" class="btn-accent">+ Nový dodavatel</button>
+      </div>
+      <div class="sup-grid" id="supGrid"></div>
+    </div>
+  </section>
+
+  <!-- ---------------------------- MÍSTA ---------------------------- -->
+  <section class="view" id="view-places">
+    <div class="toolbar">
+      <span class="spacer"></span>
+      <button id="btnNewLoc" class="btn-accent hide">+ Nové místo</button>
+    </div>
+    <div class="card tbl-wrap">
+      <table>
+        <thead><tr><th>Místo</th><th>Poznámka</th><th class="num">Položek</th><th class="num">Kusů</th><th class="num">Hodnota</th><th></th></tr></thead>
+        <tbody id="tbodyLoc"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- -------------------------- UŽIVATELÉ -------------------------- -->
+  <section class="view" id="view-users">
+    <div id="usrLocked" class="alert alert-info hide">
+      Správa účtů je přístupná jen správci skladu.
+    </div>
+    <div id="usrPanel" class="hide">
+      <div class="alert alert-info">
+        Účty se zakládají v nástěnce Supabase (<b>Authentication → Users → Add user</b>)
+        s volbou <b>Auto Confirm User</b>; do pole <i>User Metadata</i> lze rovnou vepsat
+        <code>{"full_name": "Jan Novák"}</code>. Nový účet se tady objeví po svém prvním
+        načtení a začíná v roli skladníka. Odebrání přístupu odcházejícímu funkcionáři
+        se dělá přepnutím na <b>neaktivní</b> — tím zůstane čitelné, co kdy zapsal.
+      </div>
+      <div class="card tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Jméno</th><th>E-mail</th><th>Role</th><th>Stav</th>
+            <th class="num">Zápisů</th><th>Poslední zápis</th><th></th>
+          </tr></thead>
+          <tbody id="tbodyUsers"></tbody>
+        </table>
+      </div>
+      <p class="small muted" style="margin-top:10px">
+        Počet zápisů a datum posledního se vztahují k poslednímu tisíci pohybů, které si
+        aplikace načítá; úplná historie je na záložce Historie pohybů.
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Skladová evidence merchandisingu · data se ukládají do sdílené databáze a jsou okamžitě viditelná
+  všem, kdo mají odkaz. <span id="lastSync"></span>
+</footer>
+</div>
+
+<!-- ============================= MODÁLY ============================= -->
+
+<!-- přihlášení -->
+<div class="overlay" id="mLogin">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-h"><h3>Přihlášení</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <p class="small muted" style="margin-top:0">
+        Přihlaste se vlastním účtem — u každého zapsaného pohybu pak bude vidět, kdo ho pořídil.
+      </p>
+      <label class="fld"><span>E-mail</span><input id="liMail" type="email" autocomplete="username"></label>
+      <label class="fld"><span>Heslo</span><input id="liPass" type="password" autocomplete="current-password"></label>
+      <div id="liErr" class="alert alert-err hide small"></div>
+      <div id="liMsg" class="alert alert-info hide small"></div>
+      <p class="small" style="margin:4px 0 0">
+        <a href="#" id="liForgot" style="color:var(--accent)">Zapomenuté heslo</a>
+      </p>
+    </div>
+    <div class="modal-f">
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="liGo">Přihlásit</button>
+    </div>
+  </div>
+</div>
+
+<!-- můj účet -->
+<div class="overlay" id="mAcc">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-h"><h3>Můj účet</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <p class="small muted" style="margin-top:0" id="accWho"></p>
+      <label class="fld"><span>Celé jméno</span>
+        <input id="accName" placeholder="Jan Novák" autocomplete="name"></label>
+      <p class="small muted" style="margin:-6px 0 14px">
+        Pod tímto jménem se budete podepisovat u pohybů na skladě.
+      </p>
+      <hr style="border:0;border-top:1px solid var(--line);margin:0 0 14px">
+      <label class="fld"><span>Nové heslo (nepovinné)</span>
+        <input id="accPass" type="password" autocomplete="new-password" placeholder="nejméně 8 znaků"></label>
+      <label class="fld"><span>Nové heslo pro kontrolu</span>
+        <input id="accPass2" type="password" autocomplete="new-password"></label>
+      <div id="accErr" class="alert alert-err hide small"></div>
+    </div>
+    <div class="modal-f">
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="accSave">Uložit</button>
+    </div>
+  </div>
+</div>
+
+<!-- nastavení nového hesla po obnově -->
+<div class="overlay" id="mReset">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-h"><h3>Nastavení nového hesla</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <p class="small muted" style="margin-top:0">
+        Přišli jste z odkazu pro obnovu hesla. Zvolte si nové heslo.
+      </p>
+      <label class="fld"><span>Nové heslo</span>
+        <input id="rsPass" type="password" autocomplete="new-password" placeholder="nejméně 8 znaků"></label>
+      <label class="fld"><span>Nové heslo pro kontrolu</span>
+        <input id="rsPass2" type="password" autocomplete="new-password"></label>
+      <div id="rsErr" class="alert alert-err hide small"></div>
+    </div>
+    <div class="modal-f">
+      <button class="btn-primary" id="rsGo">Nastavit heslo</button>
+    </div>
+  </div>
+</div>
+
+<!-- úprava uživatele (jen správce) -->
+<div class="overlay" id="mUser">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-h"><h3>Úprava účtu</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <p class="small muted" style="margin-top:0" id="usWho"></p>
+      <label class="fld"><span>Celé jméno</span><input id="usName"></label>
+      <label class="fld"><span>Role</span>
+        <select id="usRole">
+          <option value="stock">Skladník — zapisuje pohyby na skladě</option>
+          <option value="admin">Správce — navíc položky, ceny, dodavatelé, účty</option>
+        </select></label>
+      <label class="small muted" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <input type="checkbox" id="usActive" style="width:auto"> účet je aktivní</label>
+      <p class="small muted" style="margin:0 0 6px">
+        Neaktivní účet se nemůže nikam zapsat, ale jeho dřívější zápisy zůstávají v historii.
+        Úplné zrušení přihlášení se provádí smazáním účtu v nástěnce Supabase.
+      </p>
+      <div id="usErr" class="alert alert-err hide small"></div>
+    </div>
+    <div class="modal-f">
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="usSave">Uložit</button>
+    </div>
+  </div>
+</div>
+
+<!-- změna množství -->
+<div class="overlay" id="mQty">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-h"><h3>Změna množství</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <p id="qCtx" class="small muted" style="margin-top:0"></p>
+      <label class="fld"><span>Operace</span>
+        <select id="qOp">
+          <option value="in">Naskladnit (přidat kusy)</option>
+          <option value="out">Vydat / prodat (odebrat kusy)</option>
+          <option value="adjust">Inventura — nastavit přesný stav</option>
+        </select></label>
+      <label class="fld"><span id="qLbl">Počet kusů</span>
+        <input id="qVal" type="number" min="0" step="1" value="1"></label>
+      <label class="fld"><span>Poznámka (nepovinné)</span>
+        <input id="qNote" placeholder="např. prodej na zápase, faktura 2026/114"></label>
+      <div id="qErr" class="alert alert-err hide small"></div>
+    </div>
+    <div class="modal-f">
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="qGo">Uložit pohyb</button>
+    </div>
+  </div>
+</div>
+
+<!-- přesun mezi místy -->
+<div class="overlay" id="mMove">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-h"><h3>Přesun mezi místy</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <p id="mvCtx" class="small muted" style="margin-top:0"></p>
+      <div class="row2">
+        <label class="fld"><span>Odkud</span><select id="mvFrom"></select></label>
+        <label class="fld"><span>Kam</span><select id="mvTo"></select></label>
+      </div>
+      <label class="fld"><span>Počet kusů</span><input id="mvQty" type="number" min="1" step="1" value="1"></label>
+      <label class="fld"><span>Poznámka</span><input id="mvNote" placeholder="např. doplnění na Strahov"></label>
+      <div id="mvErr" class="alert alert-err hide small"></div>
+    </div>
+    <div class="modal-f">
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="mvGo">Přesunout</button>
+    </div>
+  </div>
+</div>
+
+<!-- položka -->
+<div class="overlay" id="mItem">
+  <div class="modal wide">
+    <div class="modal-h"><h3 id="itTitle">Nová položka</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <div class="row2">
+        <label class="fld"><span>Název položky *</span><input id="itName" placeholder="např. Tričko klubové černé"></label>
+        <label class="fld"><span>Kategorie</span><input id="itCat" list="catList" placeholder="oblečení, doplňky…">
+          <datalist id="catList"></datalist></label>
+      </div>
+      <label class="fld"><span>Popis</span><textarea id="itDesc" placeholder="materiál, střih, potisk, komu je určeno…"></textarea></label>
+      <div class="row3">
+        <label class="fld"><span>Nákupní cena (Kč/ks)</span><input id="itBuy" type="number" step="0.01" min="0"></label>
+        <label class="fld"><span>Prodejní cena (Kč/ks)</span><input id="itSell" type="number" step="0.01" min="0"></label>
+        <label class="fld"><span>Dodavatel</span><select id="itSup"></select></label>
+      </div>
+      <label class="fld"><span>Fotografie</span>
+        <input id="itPhoto" type="file" accept="image/*">
+        <span class="small muted">Obrázek se automaticky zmenší, aby stránka zůstala rychlá.</span></label>
+      <div id="itPhotoPrev" style="margin:-4px 0 12px"></div>
+
+      <div style="border-top:1px solid var(--line);padding-top:14px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
+          <b style="font-size:14px">Velikosti / varianty</b>
+          <span class="small muted">u položky bez velikostí nechte jedinou variantu „—“</span>
+          <span class="spacer"></span>
+          <button class="btn-sm" id="itAddVar" type="button">+ Varianta</button>
+        </div>
+        <div class="var-row"><div class="hd">Označení</div><div class="hd">Kód / SKU</div><div class="hd">Min. zásoba</div><div></div></div>
+        <div id="itVars"></div>
+      </div>
+      <div id="itErr" class="alert alert-err hide small" style="margin-top:12px"></div>
+    </div>
+    <div class="modal-f">
+      <button class="btn-danger hide" id="itDel">Smazat položku</button>
+      <span class="spacer"></span>
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="itSave">Uložit</button>
+    </div>
+  </div>
+</div>
+
+<!-- dodavatel -->
+<div class="overlay" id="mSup">
+  <div class="modal wide">
+    <div class="modal-h"><h3 id="suTitle">Nový dodavatel</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <div class="row2">
+        <label class="fld"><span>Název firmy *</span><input id="suName"></label>
+        <label class="fld"><span>Zaměření</span><input id="suCat" placeholder="textil, potisk, reklamní předměty…"></label>
+      </div>
+      <div class="row2">
+        <label class="fld"><span>Kontaktní osoba</span><input id="suPerson"></label>
+        <label class="fld"><span>Telefon</span><input id="suPhone"></label>
+      </div>
+      <div class="row2">
+        <label class="fld"><span>E-mail</span><input id="suMail" type="email"></label>
+        <label class="fld"><span>Web</span><input id="suWeb" placeholder="https://"></label>
+      </div>
+      <label class="fld"><span>Adresa</span><input id="suAddr"></label>
+      <div class="row2">
+        <label class="fld"><span>IČO</span><input id="suIco"></label>
+        <label class="fld"><span>DIČ</span><input id="suDic"></label>
+      </div>
+      <label class="fld"><span>Poznámka</span><textarea id="suNote" placeholder="např. nejlepší ceny na potisk, dlouhé doby realizace, vhodné na malá množství…"></textarea></label>
+      <div id="suErr" class="alert alert-err hide small"></div>
+    </div>
+    <div class="modal-f">
+      <button class="btn-danger hide" id="suDel">Smazat dodavatele</button>
+      <span class="spacer"></span>
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="suSave">Uložit</button>
+    </div>
+  </div>
+</div>
+
+<!-- místo -->
+<div class="overlay" id="mLoc">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-h"><h3 id="loTitle">Nové místo</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <label class="fld"><span>Název místa *</span><input id="loName" placeholder="např. Sklad Strahov, Vozovna, Regál B"></label>
+      <label class="fld"><span>Poznámka</span><textarea id="loNote" placeholder="Jen tady se mohou skladovat oblečení bez klimatizace…"></textarea></label>
+      <div id="loErr" class="alert alert-err hide small"></div>
+    </div>
+    <div class="modal-f">
+      <button class="btn-danger hide" id="loDel">Smazat místo</button>
+      <span class="spacer"></span>
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="loSave">Uložit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Supabase API:
+
+Tables:
+  items: id, name, category, description, photo (base64 image), purchase_price, sale_price, supplier_id, created_by, created_at
+  variants: id, item_id, label, sku, min_stock
+  locations: id, name, note
+  stock: variant_id, location_id, qty
+  movements: id, variant_id, type (in|out|move|adjust), qty, from_location_id, to_location_id, note, author_id, created_by (email), created_at
+  profiles: id (= auth.users.id), email (from auth.users), full_name, role (admin|stock), active
+  suppliers: id, name, category, person, phone, email, website, address, ico, dic, note
+-->
+
+<script>
+const CONFIG = {
+  // Vyčkužujte z https://app.supabase.com/project/YOUR-ID/settings/api
+  // Project Settings > API > Project URL a anon key
+  url: localStorage.getItem('cfgUrl') || '',
+  key: localStorage.getItem('cfgKey') || '',
+};
+
+const sb = CONFIG.url && CONFIG.key ? supabase.createClient(CONFIG.url, CONFIG.key) : null;
+
+let S = {
+  user: null,
+  profile: null,
+  items: [],
+  variants: [],
+  locations: [],
+  stock: {},
+  movements: [],
+  suppliers: [],
+  editItem: null,
+  editSup: null,
+  editLoc: null,
+  editUser: null,
+};
+
+let sb_sub = null;
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+const setTab = (t) => {
+  $$('.tab').forEach(e => e.classList.toggle('active', e.dataset.tab == t));
+  $$('.view').forEach(e => e.classList.toggle('active', e.id === 'view-' + t));
+};
+
+const showModal = (id) => document.getElementById(id)?.classList.add('open');
+const hideModal = () => document.querySelectorAll('.overlay').forEach(e => e.classList.remove('open'));
+const showErr = (sel, msg) => { let e = $(sel); if(e) { e.textContent = msg; e.classList.remove('hide'); } };
+const hideErr = (sel) => { let e = $(sel); if(e) e.classList.add('hide'); };
+const toast = (msg, err=false) => { $('#toast').textContent = msg; $('#toast').classList.toggle('err', err); $('#toast').classList.add('show'); setTimeout(() => $('#toast').classList.remove('show'), 2500); };
+
+// přátelštíjour regex -- malá a bez díalek
+const norm = (s) => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+// formát a přév odčasovéčky na řetězec
+const dt = (s) => new Date(s).toLocaleString('cs-CZ');
+const czk = (n) => n ? new Intl.NumberFormat('cs-CZ', {style:'currency', currency:'CZK'}).format(n) : '';
+const qty = (n) => n ? new Intl.NumberFormat('cs-CZ', {minimumFractionDigits:0}).format(n) : '0';
+
+const itemById = (id) => S.items.find(i => i.id === id);
+const varById = (id) => S.variants.find(v => v.id === id);
+const supById = (id) => S.suppliers.find(s => s.id === id);
+const locById = (id) => S.locations.find(l => l.id === id);
+const userById = (id) => S.profiles.find(u => u.id === id);
+const qtyOf = (var_id, loc_id) => S.stock[[var_id, loc_id]] || 0;
+const totalOf = (var_id) => Object.entries(S.stock).reduce((s, [k, v]) => k.startsWith(var_id + ',') ? s + v : s, 0);
+const authorOf = (m) => S.profiles.find(u => u.email === m.created_by)?.full_name || m.created_by?.split('@')[0] || '?';
+const hasAdm = S.profile?.role === 'admin';
+const logged = !!S.user;
+const mem = logged && S.profile?.active;
+
+const showErrš = (msg) => { showErr('#globalErr', msg); $('#globalErr').classList.remove('hide'); };
+
+const loading = async (fn) => {
+  try { return await fn(); } catch(e) { showErrš(e.message); throw e; }
+};
+
+const loadAll = async () => {
+  if(!sb) return showModal('mLogin'), alert('připojit databázi');
+  try {
+    const { data: items } = await sb.from('items').select('*').order('name');
+    const { data: variants } = await sb.from('variants').select('*');
+    const { data: locations } = await sb.from('locations').select('*').order('name');
+    const { data: stock, error: stockErr } = await sb.from('stock').select('*');
+    const { data: movements } = await sb.from('movements').select('*').order('created_at', {ascending:false}).limit(1000);
+    const { data: suppliers } = await sb.from('suppliers').select('*').order('name');
+    const { data: profiles } = await sb.from('profiles').select('*');
+
+    S.items = items || [];
+    S.variants = variants || [];
+    S.locations = locations || [];
+    S.movements = movements || [];
+    S.suppliers = suppliers || [];
+    S.profiles = profiles || [];
+
+    S.stock = {};
+    (stock || []).forEach(s => { S.stock[[s.variant_id, s.location_id]] = s.qty; });
+
+    renderFilters();
+    renderStats();
+    renderTable();
+    renderMoves();
+    renderSuppliers();
+    renderLocations();
+    renderUsers();
+
+    $('#stockHint').textContent = `Nachteen: ${S.items.length} polozek, ${S.variants.length} variant, ${S.locations.length} mist`;
+    const lastUp = movements?.[0]?.created_at;
+    if(lastUp) $('#lastSync').textContent = `posledni synchronizace: ${new Date(lastUp).toLocaleString('cs-CZ')}`;
+  } catch(e) { showErrš(e.message); }
+};
+
+const renderFilters = () => {
+  const cats = [...new Set(S.items.map(i => i.category).filter(Boolean))].sort();
+  const locOpt = S.locations.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+  const catOpt = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  $('#fLoc').innerHTML = '<option value="all">Vsechna mista</option>' + locOpt;
+  $('#fCat').innerHTML = '<option value="all">Vsechny kategorie</option>' + catOpt;
+  $('#mvFrom').innerHTML = locOpt;
+  $('#mvTo').innerHTML = locOpt;
+  $('#itSup').innerHTML = S.suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  $('#catList').innerHTML = cats.map(c => `<option value="${c}">`).join('');
+};
+
+const renderStats = () => {
+  const lowCount = S.items.filter(i => {
+    const vs = S.variants.filter(v => v.item_id === i.id);
+    return vs.some(v => {
+      const tot = totalOf(v.id);
+      const min = v.min_stock || 0;
+      return tot < min;
+    });
+  }).length;
+
+  const totalVal = S.items.reduce((s, i) => {
+    const vs = S.variants.filter(v => v.item_id === i.id);
+    return s + vs.reduce((s2, v) => s2 + (i.purchase_price || 0) * totalOf(v.id), 0);
+  }, 0);
+
+  const items = S.items.length;
+  const variants = S.variants.length;
+  const locs = S.locations.length;
+  const mkStat = (k, v, s='') => `<div class="stat"><div class="k">${k}</div><div class="v">${qty(v)}</div><div class="s">${s}</div></div>`;
+
+  $('#stats').innerHTML = mkStat('Polozek', items) + mkStat('Variant', variants) + mkStat('Mist', locs) + mkStat('Dochazi', lowCount) + mkStat('Nakupni hodnota', Math.round(totalVal), czk(totalVal));
+
+  const low = [];
+  S.items.forEach(i => {
+    const vs = S.variants.filter(v => v.item_id === i.id).filter(v => {
+      const tot = totalOf(v.id);
+      return tot > 0 && tot < (v.min_stock || 0);
+    });
+    vs.forEach(v => low.push(`${i.name} / ${v.label}: ${qty(totalOf(v.id))} ks (min ${qty(v.min_stock || 0)})`.trim()));
+  });
+  if(low.length) {
+    $('#lowAlert').innerHTML = `Dochazi: ${low.join(', ')}`;
+    $('#lowAlert').classList.remove('hide');
+  } else $('#lowAlert').classList.add('hide');
+};
+
+const renderTable = () => {
+  const q = norm($('#q')?.value || '');
+  const locFilter = $('#fLoc')?.value;
+  const catFilter = $('#fCat')?.value;
+  const lowOnly = $('#fLow')?.checked;
+
+  let rows = [];
+  const headRow = [['Polozka', 'Kategorie', 'Varianta', 'SKU', ...S.locations.map(l => l.name), 'Celkem', 'Min', 'Nak', 'Prod', 'Uhr', 'Dodavatel']];
+  rows.push(headRow[0]);
+
+  S.items.filter(i => !q || norm(i.name).includes(q) || norm(i.category).includes(q)
+                      || norm(i.description).includes(q)
+                      || S.variants.filter(v => v.item_id === i.id).some(v => norm(v.label).includes(q) || norm(v.sku).includes(q)))
+        .filter(i => !catFilter || catFilter === 'all' || i.category === catFilter)
+        .forEach(i => {
+    S.variants.filter(v => v.item_id === i.id).forEach(v => {
+      const tot = totalOf(v.id);
+      if(lowOnly && tot >= (v.min_stock || 0)) return;
+      const hasLoc = !locFilter || locFilter === 'all';
+      rows.push([i.name, i.category||'', v.label, v.sku||'',
+        ...S.locations.map(l => qtyOf(v.id, l.id)),
+        tot, v.min_stock||0, i.purchase_price??'', i.sale_price??'',
+        i.purchase_price ? (i.purchase_price*tot).toFixed(2) : '',
+        S.suppliers.find(s=>s.id===i.supplier_id)?.name || '']);
+    });
+  });
+};
+
+const renderMoves = () => {
+  const q = norm($('#qm')?.value || '');
+  const typFilter = $('#fType')?.value;
+  const html = S.movements.filter(m => !q || norm(varById(m.variant_id)?.label).includes(q) || norm(itemById(varById(m.variant_id)?.item_id)?.name).includes(q))
+    .filter(m => !typFilter || typFilter === 'all' || m.type === typFilter)
+    .map(m => {
+      const v = varById(m.variant_id), i = v && itemById(v.item_id);
+      return `<tr><td>${dt(m.created_at)}</td><td>${i?.name||''}</td><td>${v?.label||''}</td><td>${TYPE_LBL[m.type]||m.type}</td>
+        <td class="num">${qty(m.qty)}</td>
+        <td>${m.from_location_id ? locById(m.from_location_id)?.name : ''}</td>
+        <td>${m.to_location_id ? locById(m.to_location_id)?.name : ''}</td>
+        <td>${m.note||''}</td><td>${authorOf(m)}</td></tr>`;
+    }).join('');
+  $('#tbodyMoves').innerHTML = html;
+};
+
+const TYPE_LBL = { in: 'Naskladneni', out: 'Vydej', move: 'Presun', adjust: 'Oprava' };
+
+$('#q').addEventListener('input', renderTable);
+$('#fLoc').addEventListener('change', renderTable);
+$('#fCat').addEventListener('change', renderTable);
+$('#fLow').addEventListener('change', renderTable);
+$('#qm').addEventListener('input', renderMoves);
+$('#fType').addEventListener('change', renderMoves);
+
+$$('.tab').forEach(el => el.addEventListener('click', () => setTab(el.dataset.tab)));
+
+const renderSuppliers = () => {
+  $('#supPanel').classList.toggle('hide', !mem);
+  $('#supLocked').classList.toggle('hide', mem);
+  if(!mem) return;
+  const q = norm($('#qs')?.value || '');
+  const html = S.suppliers.filter(s => !q || norm(s.name).includes(q) || norm(s.category).includes(q))
+    .map(s => `<div class="sup">
+      <h4>${s.name}</h4>
+      <p class="cat">${s.category||''}</p>
+      <dl>
+        <dt>Osoba</dt><dd>${s.person||''}</dd>
+        <dt>Telefon</dt><dd>${s.phone||''}</dd>
+        <dt>E-mail</dt><dd><a href="mailto:${s.email}">${s.email||''}</a></dd>
+        <dt>Web</dt><dd><a href="${s.website}" target="_blank">${s.website||''}</a></dd>
+        <dt>Adresa</dt><dd>${s.address||''}</dd>
+        <dt>IČO/DIČ</dt><dd>${s.ico||''} / ${s.dic||''}</dd>
+      </dl>
+      <p class="small muted">${s.note||''}</p>
+      <div class="acts" ${hasAdm ? '' : 'style="display:none"'}>
+        <button class="btn-sm" onclick="editSup($(this).closest('.sup'), '${s.id}')">Upravit</button>
+        ${hasAdm ? `<button class="btn-sm btn-danger" onclick="deleteSup('${s.id}')">Smazat</button>` : ''}
+      </div>
+    </div>`).join('');
+  $('#supGrid').innerHTML = html || '<p class="empty">Zádní dodavatelé</p>';
+};
+
+const renderLocations = () => {
+  const html = S.locations.map(l => {
+    const vs = S.variants.filter(v => Object.entries(S.stock).some(([k, q]) => k === `${v.id},${l.id}` && q > 0));
+    const cnt = vs.length;
+    const tot = vs.reduce((s, v) => s + qtyOf(v.id, l.id), 0);
+    const val = vs.reduce((s, v) => {
+      const i = itemById(v.item_id);
+      return s + (i?.purchase_price || 0) * qtyOf(v.id, l.id);
+    }, 0);
+    return `<tr id="loc_${l.id}">
+      <td>${l.name}</td><td class="small muted">${l.note||''}</td>
+      <td class="num">${cnt}</td><td class="num">${qty(tot)}</td><td class="num">${czk(val)}</td>
+      <td>${hasAdm ? `<button class="btn-sm" onclick="editLoc('${l.id}', ${JSON.stringify(l)})">Upravit</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+  $('#tbodyLoc').innerHTML = html;
+};
+
+const renderUsers = () => {
+  $('#usrPanel').classList.toggle('hide', !hasAdm);
+  $('#usrLocked').classList.toggle('hide', hasAdm);
+  if(!hasAdm) return;
+  const html = S.profiles.map(u => {
+    const cnt = S.movements.filter(m => m.created_by === u.email).length;
+    const last = S.movements.find(m => m.created_by === u.email)?.created_at;
+    return `<tr>
+      <td>${u.full_name||'(bez jmena)'}</td><td><code>${u.email}</code></td>
+      <td><span class="pill" style="background:${u.role==='admin'?'#cfe0f7':'#eef1f6'};color:${u.role==='admin'?'#19406e':'#6b7a90'}">${u.role}</span></td>
+      <td><span class="pill ${u.active?'pill-ok':'pill-grey'}">${u.active?'aktivni':'neaktivni'}</span></td>
+      <td class="num">${cnt}</td><td>${last?dt(last):''}</td>
+      <td><button class="btn-sm" onclick="editUser('${u.id}', ${JSON.stringify(u)})">Upravit</button></td>
+    </tr>`;
+  }).join('');
+  $('#tbodyUsers').innerHTML = html;
+};
+
+$('#qs').addEventListener('input', () => renderSuppliers());
+$('#btnNewSup').onclick = () => { S.editSup = null; showModal('mSup'); $('#suTitle').textContent = 'Novy dodavatel'; };
+$('#btnNewLoc').onclick = () => { S.editLoc = null; showModal('mLoc'); $('#loTitle').textContent = 'Nove misto'; };
+$('#btnNewItem').onclick = () => { S.editItem = null; showModal('mItem'); $('#itTitle').textContent = 'Nova polozka'; };
+
+const editSup = (el, id) => { S.editSup = supById(id); showModal('mSup'); };
+const editLoc = (id) => { S.editLoc = locById(id); showModal('mLoc'); };
+const editUser = (id, user) => { S.editUser = user; showModal('mUser'); };
+
+const deleteSup = async (id) => {
+  if(!confirm('Opravdu smazat dodavatele?')) return;
+  const {error} = await sb.from('suppliers').delete().eq('id', id);
+  if(error){ showErr('#suErr',error.message); }
+  else { hideModal(); loadAll(); toast('Dodavatel smazan'); }
+};
+
+$$('.overlay').forEach(m => {
+  m.addEventListener('click', (e) => {
+    if(e.target === m || e.target.matches('[data-close]')) hideModal();
+  });
+});
+
+const boot = async () => {
+  $('#app').classList.add('hide');
+  $('#setup').classList.add('hide');
+
+  if(!sb) return $('#setup').classList.remove('hide');
+
+  const { data: { user } } = await sb.auth.getSession();
+  S.user = user;
+  S.profile = user ? (await sb.from('profiles').select('*').eq('id', user.id).single()).data : null;
+
+  const adm = S.profile?.role === 'admin';
+  const logged = !!S.user;
+  const mem = logged && S.profile?.active;
+
+  $('#btnLogin').classList.toggle('hide', logged);
+  $('#btnAccount').classList.toggle('hide', !logged);
+  $('#btnLogout').classList.toggle('hide', !logged);
+  $('#btnNewItem').classList.toggle('hide', !adm);
+  $('#btnNewLoc').classList.toggle('hide', !adm);
+
+  if(!mem) {
+    $('#app').classList.remove('hide');
+    const shouldAsk = logged && !S.profile?.full_name;
+    if(shouldAsk) $('#namePrompt').classList.remove('hide');
+  } else {
+    $('#app').classList.remove('hide');
+    if(logged) loadAll();
+  }
+
+  if(!logged || !mem) return;
+
+  // Subscribe to changes
+  sb_sub = sb.channel('inventory').on('postgres_changes', { event: '*', schema: 'public' }, () => loadAll()).subscribe();
+};
+
+const itemById = (id) => S.items.find(i => i.id === id);
+const varById = (id) => S.variants.find(v => v.id === id);
+
+const downloadCsv = (filename, rows) => {
+  const csv = rows.map(r => r.map(c => '"' + (c+'').replace(/"/g,'""') + '"').join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+$('#cfgUrl').value = CONFIG.url;
+$('#cfgKey').value = CONFIG.key;
+$('#cfgSave').onclick = () => {
+  localStorage.setItem('cfgUrl', $('#cfgUrl').value);
+  localStorage.setItem('cfgKey', $('#cfgKey').value);
+  location.reload();
+};
+
+$('#btnLogin').onclick = () => showModal('mLogin');
+$('#btnAccount').onclick = () => showModal('mAcc');
+$('#btnLogout').onclick = async () => {
+  await sb.auth.signOut();
+  location.reload();
+};
+
+$('#liGo').onclick = async () => {
+  const email = $('#liMail').value, pass = $('#liPass').value;
+  if(!email || !pass) return showErr('#liErr','Vyplnite email a heslo');
+  hideErr('#liErr');
+  const { data, error } = await sb.auth.signInWithPassword({email, password:pass});
+  if(error) return showErr('#liErr', error.message);
+  hideModal();
+  location.reload();
+};
+
+$('#liForgot').onclick = (e) => {
+  e.preventDefault();
+  const email = prompt('Vase emailova adresa:');
+  if(!email) return;
+  sb.auth.resetPasswordForEmail(email).then(({error}) => {
+    if(error) showErr('#liErr', error.message);
+    else showErr('#liMsg','Odkaz na zmenu hesla jste si poslali na email');
+  });
+};
+
+const checkReset = async () => {
+  const hash = window.location.hash.slice(1);
+  const params = new URLSearchParams(hash);
+  if(params.get('type') === 'recovery') {
+    showModal('mReset');
+    $('#rsGo').onclick = async () => {
+      const p1 = $('#rsPass').value, p2 = $('#rsPass2').value;
+      if(!p1 || p1.length < 8) return showErr('#rsErr', 'Heslo je prilis kratke');
+      if(p1 !== p2) return showErr('#rsErr', 'Hesla se neshoduji');
+      const {error} = await sb.auth.updateUser({password:p1});
+      if(error) showErr('#rsErr', error.message);
+      else { hideModal(); history.replaceState({}, '', '/'); location.reload(); }
+    };
+  }
+};
+checkReset();
+
+$('#npFix').onclick = () => showModal('mAcc');
+
+$('#accSave').onclick = async () => {
+  const name = $('#accName').value, p1 = $('#accPass').value, p2 = $('#accPass2').value;
+  if(!name) return showErr('#accErr','Vyplnte jmeno');
+  hideErr('#accErr');
+  if(p1 || p2) {
+    if(p1.length < 8) return showErr('#accErr', 'Heslo je prilis kratke');
+    if(p1 !== p2) return showErr('#accErr','Hesla se neshoduji');
+    const {error} = await sb.auth.updateUser({password:p1});
+    if(error) return showErr('#accErr', error.message);
+  }
+  const {error} = await sb.from('profiles').update({full_name:name}).eq('id',S.user.id);
+  if(error) showErr('#accErr', error.message);
+  else { hideModal(); loadAll(); toast('Ulozeno'); S.profile.full_name = name; }
+};
+
+$('#npFix').onclick = () => showModal('mAcc');
+
+$('#usSave').onclick = async () => {
+  const id = S.editUser.id, name = $('#usName').value, role = $('#usRole').value, active = $('#usActive').checked;
+  if(!name) return showErr('#usErr', 'Vyplnte jmeno');
+  const {error} = await sb.from('profiles').update({full_name:name, role, active}).eq('id', id);
+  if(error) showErr('#usErr', error.message);
+  else { hideModal(); loadAll(); toast('Uzivatel upraven'); }
+};
+
+const editItem = (item) => { S.editItem = item; showModal('mItem'); $('#itTitle').textContent = (item ? 'Uprava' : 'Nova') + ' polozka'; };
+
+$('#itAddVar').onclick = () => {
+  const vars = S.editItem?.id ? S.variants.filter(v => v.item_id === S.editItem.id) : [];
+  const idx = vars.length + 1;
+  const html = `<div class="var-row" data-temp-id="temp_${idx}">
+    <input class="itVarLabel" placeholder="S, M, L, XL; nebo popis varianty">
+    <input class="itVarSku" placeholder="SKU">
+    <input class="itVarMin" type="number" min="0" step="1" value="0">
+    <button class="btn-sm" onclick="$(this).closest('.var-row').remove()">-</button>
+  </div>`;
+  $('#itVars').insertAdjacentHTML('beforeend', html);
+};
+
+$('#itPhoto').onchange = (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const maxW = 300, maxH = 300;
+      let w = img.width, h = img.height;
+      if(w > h) { h = Math.round(h * maxW / w); w = maxW; } else { w = Math.round(w * maxH / h); h = maxH; }
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      S.editItem.photo = dataUrl;
+      $('#itPhotoPrev').innerHTML = `<img src="${dataUrl}" style="max-width:100%;border-radius:8px;border:1px solid var(--line)">`;
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+};
+
+$('#itSave').onclick = async () => {
+  const name = $('#itName').value, desc = $('#itDesc').value, cat = $('#itCat').value,
+        buy = parseFloat($('#itBuy').value) || null, sell = parseFloat($('#itSell').value) || null,
+        sup_id = $('#itSup').value || null;
+  if(!name) return showErr('#itErr', 'Vyplnte nazev');
+  hideErr('#itErr');
+  
+  if(S.editItem) {
+    const {error} = await sb.from('items').update({name, description:desc, category:cat, purchase_price:buy, sale_price:sell, supplier_id:sup_id, photo:S.editItem.photo}).eq('id', S.editItem.id);
+    if(error) return showErr('#itErr', error.message);
+  } else {
+    const {data, error} = await sb.from('items').insert({name, description:desc, category:cat, purchase_price:buy, sale_price:sell, supplier_id:sup_id, photo:S.editItem?.photo||null, created_by:S.user.email}).select();
+    if(error) return showErr('#itErr', error.message);
+    S.editItem = data[0];
+  }
+
+  // Varianty
+  const varRows = $$('#itVars .var-row');
+  const oldVars = S.editItem.id ? S.variants.filter(v => v.item_id === S.editItem.id) : [];
+  const newVars = [];
+  
+  for(let row of varRows) {
+    const label = row.querySelector('.itVarLabel').value || '-';
+    const sku = row.querySelector('.itVarSku').value || null;
+    const min_stock = parseInt(row.querySelector('.itVarMin').value) || 0;
+    const tempId = row.dataset.tempId;
+    
+    if(tempId?.startsWith('temp_')) {
+      const {data, error} = await sb.from('variants').insert({item_id:S.editItem.id, label, sku, min_stock}).select();
+      if(error) return showErr('#itErr', error.message);
+      newVars.push(data[0]);
+    } else {
+      const varId = tempId;
+      const {error} = await sb.from('variants').update({label, sku, min_stock}).eq('id', varId);
+      if(error) return showErr('#itErr', error.message);
+      const v = S.variants.find(vv => vv.id === varId);
+      if(v) Object.assign(v, {label, sku, min_stock});
+    }
+  }
+  
+  for(let v of oldVars) {
+    if(!varRows.some(r => r.dataset.tempId === v.id)) {
+      const {error} = await sb.from('variants').delete().eq('id', v.id);
+      if(error) showErr('#itErr', error.message);
+    }
+  }
+
+  hideModal();
+  loadAll();
+  toast('Polozka ulozena');
+};
+
+$('#itDel').onclick = async () => {
+  if(!confirm('Opravdu smazat tuto polozku?')) return;
+  const {error} = await sb.from('items').delete().eq('id', S.editItem.id);
+  if(error) showErr('#itErr', error.message);
+  else { hideModal(); loadAll(); toast('Polozka smazana'); }
+};
+
+$('#suSave').onclick = async () => {
+  const name = $('#suName').value, cat = $('#suCat').value, person = $('#suPerson').value, phone = $('#suPhone').value,
+        mail = $('#suMail').value, web = $('#suWeb').value, addr = $('#suAddr').value,
+        ico = $('#suIco').value, dic = $('#suDic').value, note = $('#suNote').value;
+  if(!name) return showErr('#suErr', 'Vyplnte nazev firmy');
+  hideErr('#suErr');
+  
+  if(S.editSup) {
+    const {error} = await sb.from('suppliers').update({name, category:cat, person, phone, email:mail, website:web, address:addr, ico, dic, note}).eq('id', S.editSup.id);
+    if(error) return showErr('#suErr', error.message);
+  } else {
+    const {error} = await sb.from('suppliers').insert({name, category:cat, person, phone, email:mail, website:web, address:addr, ico, dic, note}).select();
+    if(error) return showErr('#suErr', error.message);
+  }
+  hideModal();
+  loadAll();
+  toast('Dodavatel ulozena');
+};
+
+$('#suDel').onclick = async () => {
+  if(!confirm('Opravdu smazat dodavatele?')) return;
+  const {error} = await sb.from('suppliers').delete().eq('id', S.editSup.id);
+  if(error) showErr('#suErr', error.message);
+  else { hideModal(); loadAll(); toast('Dodavatel smazan'); }
+};
+
+$('#loSave').onclick = async () => {
+  const name = $('#loName').value, note = $('#loNote').value;
+  if(!name) return showErr('#loErr', 'Vyplnte nazev mista');
+  hideErr('#loErr');
+  
+  if(S.editLoc) {
+    const {error} = await sb.from('locations').update({name, note}).eq('id', S.editLoc.id);
+    if(error) return showErr('#loErr', error.message);
+  } else {
+    const {error} = await sb.from('locations').insert({name, note}).select();
+    if(error) return showErr('#loErr', error.message);
+  }
+  hideModal();
+  loadAll();
+  toast('Misto ulozena');
+};
+
+$('#loDel').onclick = async () => {
+  if(!confirm('Opravdu smazat toto misto?')) return;
+  const {error} = await sb.from('locations').delete().eq('id', S.editLoc.id);
+  if(error) showErr('#loErr', error.message);
+  else { hideModal(); loadAll(); toast('Misto smazano'); }
+};
+
+$$('input[id^="liMail"], input[id^="liPass"]').forEach(e => e.addEventListener('keypress', (ev) => { if(ev.key === 'Enter') $('#liGo').click(); }));
+$$('input[id^="accName"]').forEach(e => e.addEventListener('keypress', (ev) => { if(ev.key === 'Enter') $('#accSave').click(); }));
+$$('input[id^="qVal"]').forEach(e => e.addEventListener('keypress', (ev) => { if(ev.key === 'Enter') $('#qGo').click(); }));
+
+$('#mLogin').addEventListener('click', (e) => { if(e.target === $('#mLogin')) hideModal(); });
+
+const qtys = async () => {
+  const id = prompt('Varian ID:');
+  if(!id) return;
+  const v = varById(id);
+  if(!v) return alert('Varianta nenalezena');
+  const i = itemById(v.item_id);
+  if(!i) return;
+  
+  $('#qCtx').innerHTML = `<b>${i.name}</b> / ${v.label}`;
+  showModal('mQty');
+  
+  $('#qOp').addEventListener('change', () => {
+    const op = $('#qOp').value;
+    $('#qLbl').textContent = op === 'adjust' ? 'Presny stav (kusy)' : 'Počet kusu';
+  });
+  
+  $('#qGo').onclick = async () => {
+    const op = $('#qOp').value, qty = parseInt($('#qVal').value) || 0, note = $('#qNote').value;
+    if(qty <= 0 && op !== 'adjust') return showErr('#qErr', 'Vyplnte mnozstvi');
+    hideErr('#qErr');
+    
+    let type = op, from_loc = null, to_loc = null, newQty = qty;
+    if(op === 'adjust') {
+      const tot = totalOf(id);
+      type = qty > tot ? 'in' : qty < tot ? 'out' : 'adjust';
+      qty = Math.abs(qty - tot);
+    }
+    
+    const firstLoc = S.locations[0]?.id;
+    if(op === 'in' || type === 'in') to_loc = firstLoc;
+    else if(op === 'out' || type === 'out') from_loc = firstLoc;
+    
+    const {error} = await sb.from('movements').insert({variant_id:id, type, qty, from_location_id:from_loc, to_location_id:to_loc, note:note||null, author_id:S.user?.id||null, created_by:S.user?.email||null}).select();
+    if(error) showErr('#qErr', error.message);
+    else { hideModal(); loadAll(); toast('Pohyb ulozena'); }
+  };
+};
+
+const renderTable = () => {
+  const q = norm($('#q')?.value || '');
+  const locFilter = $('#fLoc')?.value;
+  const catFilter = $('#fCat')?.value;
+  const lowOnly = $('#fLow')?.checked;
+  const adm = S.profile?.role === 'admin';
+
+  const html = S.items.filter(i => !q || norm(i.name).includes(q) || norm(i.category).includes(q)
+                      || norm(i.description).includes(q)
+                      || S.variants.filter(v => v.item_id === i.id).some(v => norm(v.label).includes(q) || norm(v.sku).includes(q)))
+        .filter(i => !catFilter || catFilter === 'all' || i.category === catFilter)
+        .map(i => `<tr class="item-head"><td class="item-title"><div class="thumb${i.photo?'':'ph'}">${i.photo?`<img src="${i.photo}">`:i.name.charAt(0)}</div><b>${i.name}</b><p class="item-meta">${i.category?`<span class="pill pill-grey">${i.category}</span>`:''} ${i.sku||''}</p></td><td></td><td></td><td>${S.locations.map(()=>'').join('')}<span></span></td><td class="num"></td><td></td><td></td><td></td><td class="num"></td><td></td></tr>
+${ S.variants.filter(v => v.item_id === i.id).filter(v => !lowOnly || totalOf(v.id) < (v.min_stock || 0)).map(v => {
+      const tot = totalOf(v.id);
+      const low = v.min_stock || 0;
+      return `<tr><td class="var-label" style="font-weight:500">${v.label}</td><td>${i.category||''}</td><td><code>${v.sku||''}</code></td>
+        ${S.locations.map(l => `<td class="num qty ${tot<low?'low':''}" onclick="${mem?`qtys()`:''}"><button class="qty-btn${tot<low?' low':''}" data-var="${v.id}" data-loc="${l.id}">${qtyOf(v.id, l.id)}</button></td>`).join('')}
+        <td class="num total ${tot<low?'low':''}">${qty(tot)}</td>
+        <td class="num" style="color:var(--muted)">${qty(low)}</td>
+        <td>${czk(i.purchase_price)}</td><td>${czk(i.sale_price)}</td>
+        <td class="num">${i.purchase_price ? czk(i.purchase_price*tot) : ''}</td>
+        <td>${S.suppliers.find(s=>s.id===i.supplier_id)?.name || ''}</td></tr>`;
+    }).join('')}`).join('');
+  $('#tbodyStock').innerHTML = html || '<tr><td class="empty" style="text-align:center;padding:24px">Zadne polozky</td></tr>';
+};
+
+$('#btnNewItem').onclick = () => {
+  S.editItem = null;
+  $('#itName').value = '';
+  $('#itDesc').value = '';
+  $('#itCat').value = '';
+  $('#itBuy').value = '';
+  $('#itSell').value = '';
+  $('#itSup').value = '';
+  $('#itPhotoPrev').innerHTML = '';
+  $('#itPhoto').value = '';
+  $('#itVars').innerHTML = '';
+  $('#itTitle').textContent = 'Nova polozka';
+  $('#itDel').classList.add('hide');
+  showModal('mItem');
+  setTimeout(() => $('#itName').focus(), 100);
+};
+
+$$('[data-tab]').forEach(t => t.addEventListener('click', () => {
+  setTab(t.dataset.tab);
+  if(t.dataset.tab === 'stock') renderTable();
+  if(t.dataset.tab === 'moves') renderMoves();
+  if(t.dataset.tab === 'suppliers') renderSuppliers();
+  if(t.dataset.tab === 'places') renderLocations();
+  if(t.dataset.tab === 'users') renderUsers();
+}));
+
+let accData = {};
+setInterval(() => {
+  if(accData && Object.keys(accData).length) {
+    $('#accWho').textContent = `Prihlaseni: ${accData.email}`;
+    $('#accName').value = accData.full_name || '';
+  }
+}, 100);
+
+const renderTable_clicked = () => {
+  S.variants.find(v => (v.id ? {
+    const tot = totalOf(v.id);
+    rows.push([i.name, i.category||'', v.label, v.sku||'',
+        ...S.locations.map(l => qtyOf(v.id, l.id)),
+        tot, v.min_stock||0, i.purchase_price??'', i.sale_price??'',
+        i.purchase_price ? (i.purchase_price*tot).toFixed(2) : '',
+        S.suppliers.find(s=>s.id===i.supplier_id)?.name || '']);
+  }: null));
+};
+
+$('#accName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#accSave').click(); });
+$('#suName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#suSave').click(); });
+$('#itName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#itSave').click(); });
+$('#loName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#loSave').click(); });
+$('#usName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#usSave').click(); });
+
+$('#btnCsv').onclick = () => {
+  const rows = [['Polozka','Kategorie','Varianta','SKU',...S.locations.map(l => l.name),'Celkem','Min','Nak','Prod','Uhr','Dodavatel']];
+  S.items.forEach(i => {
+    S.variants.filter(v => v.item_id === i.id).forEach(v => {
+      const tot = totalOf(v.id);
+      rows.push([i.name, i.category||'', v.label, v.sku||'',
+        ...S.locations.map(l => qtyOf(v.id, l.id)),
+        tot, v.min_stock||0, i.purchase_price??'', i.sale_price??'',
+        i.purchase_price ? (i.purchase_price*tot).toFixed(2) : '',
+        S.suppliers.find(s=>s.id===i.supplier_id)?.name || '']);
+    });
+  });
+  downloadCsv(`sklad-merch-${new Date().toISOString().slice(0,10)}.csv`, rows);
+};
+$('#btnCsvMoves').onclick = () => {
+  const rows = [['Datum','Polozka','Varianta','Typ','Mnozstvi','Odkud','Kam','Poznamka','Zadal']];
+  S.movements.forEach(m => {
+    const v = varById(m.variant_id), i = v && itemById(v.item_id);
+    rows.push([dt(m.created_at), i?.name||'', v?.label||'', TYPE_LBL[m.type], m.qty,
+      m.from_location_id ? locById(m.from_location_id)?.name : '',
+      m.to_location_id ? locById(m.to_location_id)?.name : '',
+      m.note||'', authorOf(m)]);
+  });
+  downloadCsv(`pohyby-merch-${new Date().toISOString().slice(0,10)}.csv`, rows);
+};
+$('#btnPrint').onclick = () => window.print();
+
+/* ------ renderTable sloupečky -------- */
+setInterval(() => {
+  if(!sb || document.querySelector('.overlay.open')) return;
+  if(document.querySelector('.overlay.open')) return;
+  loadAll();
+}, 60000);
+</script>
+</body>
+</html>
