@@ -273,7 +273,7 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
 
   <!-- ------------------------ HISTORIE POHYBŮ ---------------------- -->
   <section class="view" id="view-moves">
-    <div id="mvLocked" class="alert alert-ifo hide">
+    <div id="mvLocked" class="alert alert-info hide">
       Historie pohybů je vedena jmenovitě, a proto je přístupná až po přihlášení.
     </div>
     <div id="mvPanel">
@@ -573,11 +573,12 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
         <label class="fld"><span>IČO</span><input id="suIco"></label>
         <label class="fld"><span>DIČ</span><input id="suDic"></label>
       </div>
-      <label class="fld"><span>Poznámka</span><textarea id="suNote" placeholder="např. nejlepší ceny na potisk, dlouhé doby realizace, vhodné na malá množství…"></textarea></label>
+      <label class="fld"><span>Obchodní podmínky</span><input id="suTerms" placeholder="splatnost 14 dní, min. odběr 25 ks, sleva 10 % nad 100 ks"></label>
+      <label class="fld"><span>Poznámka</span><textarea id="suNote"></textarea></label>
       <div id="suErr" class="alert alert-err hide small"></div>
     </div>
     <div class="modal-f">
-      <button class="btn-danger hide" id="suDel">Smazat dodavatele</button>
+      <button class="btn-danger hide" id="suDel">Smazat</button>
       <span class="spacer"></span>
       <button data-close>Zrušit</button>
       <button class="btn-primary" id="suSave">Uložit</button>
@@ -590,12 +591,12 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
   <div class="modal" style="max-width:420px">
     <div class="modal-h"><h3 id="loTitle">Nové místo</h3><button class="x" data-close>&times;</button></div>
     <div class="modal-b">
-      <label class="fld"><span>Název místa *</span><input id="loName" placeholder="např. Sklad Strahov, Vozovna, Regál B"></label>
-      <label class="fld"><span>Poznámka</span><textarea id="loNote" placeholder="Jen tady se mohou skladovat oblečení bez klimatizace…"></textarea></label>
+      <label class="fld"><span>Název místa *</span><input id="loName"></label>
+      <label class="fld"><span>Poznámka</span><input id="loNote" placeholder="kdo má klíče, kde přesně…"></label>
       <div id="loErr" class="alert alert-err hide small"></div>
     </div>
     <div class="modal-f">
-      <button class="btn-danger hide" id="loDel">Smazat místo</button>
+      <button class="btn-danger hide" id="loDel">Smazat</button>
       <span class="spacer"></span>
       <button data-close>Zrušit</button>
       <button class="btn-primary" id="loSave">Uložit</button>
@@ -603,708 +604,862 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
   </div>
 </div>
 
-<!-- Supabase API:
-
-Tables:
-  items: id, name, category, description, photo (base64 image), purchase_price, sale_price, supplier_id, created_by, created_at
-  variants: id, item_id, label, sku, min_stock
-  locations: id, name, note
-  stock: variant_id, location_id, qty
-  movements: id, variant_id, type (in|out|move|adjust), qty, from_location_id, to_location_id, note, author_id, created_by (email), created_at
-  profiles: id (= auth.users.id), email (from auth.users), full_name, role (admin|stock), active
-  suppliers: id, name, category, person, phone, email, website, address, ico, dic, note
--->
+<div id="toast"></div>
 
 <script>
+/* =====================================================================
+   CONFIG — údaje projektu v Supabase (Project Settings → API Keys).
+   Publishable klíč je určen k veřejnému použití a smí být v tomto
+   souboru i na GitHubu; co kdo smí číst a měnit, rozhodují práva
+   a pravidla v databázi, ne tento soubor.
+   ===================================================================== */
 const CONFIG = {
-  // Vyčkužujte z https://app.supabase.com/project/YOUR-ID/settings/api
-  // Project Settings > API > Project URL a anon key
-  url: localStorage.getItem('cfgUrl') || '',
-  key: localStorage.getItem('cfgKey') || '',
+  SUPABASE_URL : 'https://qgxbppqdoxztrqnyzswz.supabase.co',
+  SUPABASE_ANON_KEY : 'sb_publishable_u5nL7ivn_SPQiebFrCb_aw_inVtVNJx',
+  CLUB_NAME : 'ČVUT Engineers Prague'
 };
 
-const sb = CONFIG.url && CONFIG.key ? supabase.createClient(CONFIG.url, CONFIG.key) : null;
+/* ---------------------- pomocné funkce ------------------------------ */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const czk = n => (n == null || isNaN(n)) ? '' :
+  new Intl.NumberFormat('cs-CZ',{style:'currency',currency:'CZK',maximumFractionDigits:0}).format(n);
+const num = n => new Intl.NumberFormat('cs-CZ').format(n ?? 0);
+const dt  = s => new Date(s).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 
-let S = {
-  user: null,
-  profile: null,
-  items: [],
-  variants: [],
-  locations: [],
-  stock: {},
-  movements: [],
-  suppliers: [],
-  editItem: null,
-  editSup: null,
-  editLoc: null,
-  editUser: null,
-};
+function toast(msg, isErr){
+  const t = $('#toast'); t.textContent = msg; t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(t._t); t._t = setTimeout(()=>t.className='', 2800);
+}
+function openM(id){ $(id).classList.add('open'); }
+function closeM(id){ $(id).classList.remove('open'); }
+function showErr(el, msg){ const e=$(el); if(!msg){e.classList.add('hide');return;} e.textContent=msg; e.classList.remove('hide'); }
 
-let sb_sub = null;
+/* ---------------------- inicializace klienta ------------------------ */
+let sb = null;
+const LS = 'ep-merch-config';
+function activeConfig(){
+  let c = {...CONFIG};
+  try{ const s = JSON.parse(localStorage.getItem(LS) || 'null'); if(s) c = {...c, ...s}; }catch(e){}
+  return c;
+}
+let CFG = activeConfig();
 
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
-
-const setTab = (t) => {
-  $$('.tab').forEach(e => e.classList.toggle('active', e.dataset.tab == t));
-  $$('.view').forEach(e => e.classList.toggle('active', e.id === 'view-' + t));
-};
-
-const showModal = (id) => document.getElementById(id)?.classList.add('open');
-const hideModal = () => document.querySelectorAll('.overlay').forEach(e => e.classList.remove('open'));
-const showErr = (sel, msg) => { let e = $(sel); if(e) { e.textContent = msg; e.classList.remove('hide'); } };
-const hideErr = (sel) => { let e = $(sel); if(e) e.classList.add('hide'); };
-const toast = (msg, err=false) => { $('#toast').textContent = msg; $('#toast').classList.toggle('err', err); $('#toast').classList.add('show'); setTimeout(() => $('#toast').classList.remove('show'), 2500); };
-
-// přátelštíjour regex -- malá a bez díalek
-const norm = (s) => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-// formát a přév odčasovéčky na řetězec
-const dt = (s) => new Date(s).toLocaleString('cs-CZ');
-const czk = (n) => n ? new Intl.NumberFormat('cs-CZ', {style:'currency', currency:'CZK'}).format(n) : '';
-const qty = (n) => n ? new Intl.NumberFormat('cs-CZ', {minimumFractionDigits:0}).format(n) : '0';
-
-const itemById = (id) => S.items.find(i => i.id === id);
-const varById = (id) => S.variants.find(v => v.id === id);
-const supById = (id) => S.suppliers.find(s => s.id === id);
-const locById = (id) => S.locations.find(l => l.id === id);
-const userById = (id) => S.profiles.find(u => u.id === id);
-const qtyOf = (var_id, loc_id) => S.stock[[var_id, loc_id]] || 0;
-const totalOf = (var_id) => Object.entries(S.stock).reduce((s, [k, v]) => k.startsWith(var_id + ',') ? s + v : s, 0);
-const authorOf = (m) => S.profiles.find(u => u.email === m.created_by)?.full_name || m.created_by?.split('@')[0] || '?';
-const hasAdm = S.profile?.role === 'admin';
-const logged = !!S.user;
-const mem = logged && S.profile?.active;
-
-const showErrš = (msg) => { showErr('#globalErr', msg); $('#globalErr').classList.remove('hide'); };
-
-const loading = async (fn) => {
-  try { return await fn(); } catch(e) { showErrš(e.message); throw e; }
-};
-
-const loadAll = async () => {
-  if(!sb) return showModal('mLogin'), alert('připojit databázi');
-  try {
-    const { data: items } = await sb.from('items').select('*').order('name');
-    const { data: variants } = await sb.from('variants').select('*');
-    const { data: locations } = await sb.from('locations').select('*').order('name');
-    const { data: stock, error: stockErr } = await sb.from('stock').select('*');
-    const { data: movements } = await sb.from('movements').select('*').order('created_at', {ascending:false}).limit(1000);
-    const { data: suppliers } = await sb.from('suppliers').select('*').order('name');
-    const { data: profiles } = await sb.from('profiles').select('*');
-
-    S.items = items || [];
-    S.variants = variants || [];
-    S.locations = locations || [];
-    S.movements = movements || [];
-    S.suppliers = suppliers || [];
-    S.profiles = profiles || [];
-
-    S.stock = {};
-    (stock || []).forEach(s => { S.stock[[s.variant_id, s.location_id]] = s.qty; });
-
-    renderFilters();
-    renderStats();
-    renderTable();
-    renderMoves();
-    renderSuppliers();
-    renderLocations();
-    renderUsers();
-
-    $('#stockHint').textContent = `Nachteen: ${S.items.length} polozek, ${S.variants.length} variant, ${S.locations.length} mist`;
-    const lastUp = movements?.[0]?.created_at;
-    if(lastUp) $('#lastSync').textContent = `posledni synchronizace: ${new Date(lastUp).toLocaleString('cs-CZ')}`;
-  } catch(e) { showErrš(e.message); }
-};
-
-const renderFilters = () => {
-  const cats = [...new Set(S.items.map(i => i.category).filter(Boolean))].sort();
-  const locOpt = S.locations.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
-  const catOpt = cats.map(c => `<option value="${c}">${c}</option>`).join('');
-  $('#fLoc').innerHTML = '<option value="all">Vsechna mista</option>' + locOpt;
-  $('#fCat').innerHTML = '<option value="all">Vsechny kategorie</option>' + catOpt;
-  $('#mvFrom').innerHTML = locOpt;
-  $('#mvTo').innerHTML = locOpt;
-  $('#itSup').innerHTML = S.suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-  $('#catList').innerHTML = cats.map(c => `<option value="${c}">`).join('');
-};
-
-const renderStats = () => {
-  const lowCount = S.items.filter(i => {
-    const vs = S.variants.filter(v => v.item_id === i.id);
-    return vs.some(v => {
-      const tot = totalOf(v.id);
-      const min = v.min_stock || 0;
-      return tot < min;
-    });
-  }).length;
-
-  const totalVal = S.items.reduce((s, i) => {
-    const vs = S.variants.filter(v => v.item_id === i.id);
-    return s + vs.reduce((s2, v) => s2 + (i.purchase_price || 0) * totalOf(v.id), 0);
-  }, 0);
-
-  const items = S.items.length;
-  const variants = S.variants.length;
-  const locs = S.locations.length;
-  const mkStat = (k, v, s='') => `<div class="stat"><div class="k">${k}</div><div class="v">${qty(v)}</div><div class="s">${s}</div></div>`;
-
-  $('#stats').innerHTML = mkStat('Polozek', items) + mkStat('Variant', variants) + mkStat('Mist', locs) + mkStat('Dochazi', lowCount) + mkStat('Nakupni hodnota', Math.round(totalVal), czk(totalVal));
-
-  const low = [];
-  S.items.forEach(i => {
-    const vs = S.variants.filter(v => v.item_id === i.id).filter(v => {
-      const tot = totalOf(v.id);
-      return tot > 0 && tot < (v.min_stock || 0);
-    });
-    vs.forEach(v => low.push(`${i.name} / ${v.label}: ${qty(totalOf(v.id))} ks (min ${qty(v.min_stock || 0)})`.trim()));
-  });
-  if(low.length) {
-    $('#lowAlert').innerHTML = `Dochazi: ${low.join(', ')}`;
-    $('#lowAlert').classList.remove('hide');
-  } else $('#lowAlert').classList.add('hide');
-};
-
-const renderTable = () => {
-  const q = norm($('#q')?.value || '');
-  const locFilter = $('#fLoc')?.value;
-  const catFilter = $('#fCat')?.value;
-  const lowOnly = $('#fLow')?.checked;
-
-  let rows = [];
-  const headRow = [['Polozka', 'Kategorie', 'Varianta', 'SKU', ...S.locations.map(l => l.name), 'Celkem', 'Min', 'Nak', 'Prod', 'Uhr', 'Dodavatel']];
-  rows.push(headRow[0]);
-
-  S.items.filter(i => !q || norm(i.name).includes(q) || norm(i.category).includes(q)
-                      || norm(i.description).includes(q)
-                      || S.variants.filter(v => v.item_id === i.id).some(v => norm(v.label).includes(q) || norm(v.sku).includes(q)))
-        .filter(i => !catFilter || catFilter === 'all' || i.category === catFilter)
-        .forEach(i => {
-    S.variants.filter(v => v.item_id === i.id).forEach(v => {
-      const tot = totalOf(v.id);
-      if(lowOnly && tot >= (v.min_stock || 0)) return;
-      const hasLoc = !locFilter || locFilter === 'all';
-      rows.push([i.name, i.category||'', v.label, v.sku||'',
-        ...S.locations.map(l => qtyOf(v.id, l.id)),
-        tot, v.min_stock||0, i.purchase_price??'', i.sale_price??'',
-        i.purchase_price ? (i.purchase_price*tot).toFixed(2) : '',
-        S.suppliers.find(s=>s.id===i.supplier_id)?.name || '']);
-    });
-  });
-};
-
-const renderMoves = () => {
-  const q = norm($('#qm')?.value || '');
-  const typFilter = $('#fType')?.value;
-  const html = S.movements.filter(m => !q || norm(varById(m.variant_id)?.label).includes(q) || norm(itemById(varById(m.variant_id)?.item_id)?.name).includes(q))
-    .filter(m => !typFilter || typFilter === 'all' || m.type === typFilter)
-    .map(m => {
-      const v = varById(m.variant_id), i = v && itemById(v.item_id);
-      return `<tr><td>${dt(m.created_at)}</td><td>${i?.name||''}</td><td>${v?.label||''}</td><td>${TYPE_LBL[m.type]||m.type}</td>
-        <td class="num">${qty(m.qty)}</td>
-        <td>${m.from_location_id ? locById(m.from_location_id)?.name : ''}</td>
-        <td>${m.to_location_id ? locById(m.to_location_id)?.name : ''}</td>
-        <td>${m.note||''}</td><td>${authorOf(m)}</td></tr>`;
-    }).join('');
-  $('#tbodyMoves').innerHTML = html;
-};
-
-const TYPE_LBL = { in: 'Naskladneni', out: 'Vydej', move: 'Presun', adjust: 'Oprava' };
-
-$('#q').addEventListener('input', renderTable);
-$('#fLoc').addEventListener('change', renderTable);
-$('#fCat').addEventListener('change', renderTable);
-$('#fLow').addEventListener('change', renderTable);
-$('#qm').addEventListener('input', renderMoves);
-$('#fType').addEventListener('change', renderMoves);
-
-$$('.tab').forEach(el => el.addEventListener('click', () => setTab(el.dataset.tab)));
-
-const renderSuppliers = () => {
-  $('#supPanel').classList.toggle('hide', !mem);
-  $('#supLocked').classList.toggle('hide', mem);
-  if(!mem) return;
-  const q = norm($('#qs')?.value || '');
-  const html = S.suppliers.filter(s => !q || norm(s.name).includes(q) || norm(s.category).includes(q))
-    .map(s => `<div class="sup">
-      <h4>${s.name}</h4>
-      <p class="cat">${s.category||''}</p>
-      <dl>
-        <dt>Osoba</dt><dd>${s.person||''}</dd>
-        <dt>Telefon</dt><dd>${s.phone||''}</dd>
-        <dt>E-mail</dt><dd><a href="mailto:${s.email}">${s.email||''}</a></dd>
-        <dt>Web</dt><dd><a href="${s.website}" target="_blank">${s.website||''}</a></dd>
-        <dt>Adresa</dt><dd>${s.address||''}</dd>
-        <dt>IČO/DIČ</dt><dd>${s.ico||''} / ${s.dic||''}</dd>
-      </dl>
-      <p class="small muted">${s.note||''}</p>
-      <div class="acts" ${hasAdm ? '' : 'style="display:none"'}>
-        <button class="btn-sm" onclick="editSup($(this).closest('.sup'), '${s.id}')">Upravit</button>
-        ${hasAdm ? `<button class="btn-sm btn-danger" onclick="deleteSup('${s.id}')">Smazat</button>` : ''}
-      </div>
-    </div>`).join('');
-  $('#supGrid').innerHTML = html || '<p class="empty">Zádní dodavatelé</p>';
-};
-
-const renderLocations = () => {
-  const html = S.locations.map(l => {
-    const vs = S.variants.filter(v => Object.entries(S.stock).some(([k, q]) => k === `${v.id},${l.id}` && q > 0));
-    const cnt = vs.length;
-    const tot = vs.reduce((s, v) => s + qtyOf(v.id, l.id), 0);
-    const val = vs.reduce((s, v) => {
-      const i = itemById(v.item_id);
-      return s + (i?.purchase_price || 0) * qtyOf(v.id, l.id);
-    }, 0);
-    return `<tr id="loc_${l.id}">
-      <td>${l.name}</td><td class="small muted">${l.note||''}</td>
-      <td class="num">${cnt}</td><td class="num">${qty(tot)}</td><td class="num">${czk(val)}</td>
-      <td>${hasAdm ? `<button class="btn-sm" onclick="editLoc('${l.id}', ${JSON.stringify(l)})">Upravit</button>` : ''}</td>
-    </tr>`;
-  }).join('');
-  $('#tbodyLoc').innerHTML = html;
-};
-
-const renderUsers = () => {
-  $('#usrPanel').classList.toggle('hide', !hasAdm);
-  $('#usrLocked').classList.toggle('hide', hasAdm);
-  if(!hasAdm) return;
-  const html = S.profiles.map(u => {
-    const cnt = S.movements.filter(m => m.created_by === u.email).length;
-    const last = S.movements.find(m => m.created_by === u.email)?.created_at;
-    return `<tr>
-      <td>${u.full_name||'(bez jmena)'}</td><td><code>${u.email}</code></td>
-      <td><span class="pill" style="background:${u.role==='admin'?'#cfe0f7':'#eef1f6'};color:${u.role==='admin'?'#19406e':'#6b7a90'}">${u.role}</span></td>
-      <td><span class="pill ${u.active?'pill-ok':'pill-grey'}">${u.active?'aktivni':'neaktivni'}</span></td>
-      <td class="num">${cnt}</td><td>${last?dt(last):''}</td>
-      <td><button class="btn-sm" onclick="editUser('${u.id}', ${JSON.stringify(u)})">Upravit</button></td>
-    </tr>`;
-  }).join('');
-  $('#tbodyUsers').innerHTML = html;
-};
-
-$('#qs').addEventListener('input', () => renderSuppliers());
-$('#btnNewSup').onclick = () => { S.editSup = null; showModal('mSup'); $('#suTitle').textContent = 'Novy dodavatel'; };
-$('#btnNewLoc').onclick = () => { S.editLoc = null; showModal('mLoc'); $('#loTitle').textContent = 'Nove misto'; };
-$('#btnNewItem').onclick = () => { S.editItem = null; showModal('mItem'); $('#itTitle').textContent = 'Nova polozka'; };
-
-const editSup = (el, id) => { S.editSup = supById(id); showModal('mSup'); };
-const editLoc = (id) => { S.editLoc = locById(id); showModal('mLoc'); };
-const editUser = (id, user) => { S.editUser = user; showModal('mUser'); };
-
-const deleteSup = async (id) => {
-  if(!confirm('Opravdu smazat dodavatele?')) return;
-  const {error} = await sb.from('suppliers').delete().eq('id', id);
-  if(error){ showErr('#suErr',error.message); }
-  else { hideModal(); loadAll(); toast('Dodavatel smazan'); }
-};
-
-$$('.overlay').forEach(m => {
-  m.addEventListener('click', (e) => {
-    if(e.target === m || e.target.matches('[data-close]')) hideModal();
-  });
-});
-
-const boot = async () => {
-  $('#app').classList.add('hide');
+function boot(){
+  CFG = activeConfig();
+  if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){
+    $('#setup').classList.remove('hide');
+    return;
+  }
   $('#setup').classList.add('hide');
+  $('#app').classList.remove('hide');
+  $('#clubName').textContent = CFG.CLUB_NAME;
+  sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+  sb.auth.getSession().then(async ({data}) => {
+    S.user = data.session?.user || null;
+    await loadProfile();
+    refreshAuthUI();
+    loadAll();
+  });
+  sb.auth.onAuthStateChange(async (ev, sess) => {
+    if(ev === 'PASSWORD_RECOVERY'){
+      S.user = sess?.user || null;
+      showErr('#rsErr',''); $('#rsPass').value = ''; $('#rsPass2').value = '';
+      closeM('#mLogin'); openM('#mReset');
+      return;
+    }
+    const changed = (sess?.user?.id || null) !== (S.user?.id || null);
+    S.user = sess?.user || null;
+    if(changed){ await loadProfile(); refreshAuthUI(); loadAll(); }
+  });
+}
+$('#cfgSave').onclick = () => {
+  const url = $('#cfgUrl').value.trim().replace(/\/+$/,'');
+  const key = $('#cfgKey').value.trim();
+  if(!url || !key){ alert('Vyplňte prosím URL i anon klíč.'); return; }
+  localStorage.setItem(LS, JSON.stringify({SUPABASE_URL:url, SUPABASE_ANON_KEY:key}));
+  boot();
+};
 
-  if(!sb) return $('#setup').classList.remove('hide');
+/* ---------------------- stav aplikace -------------------------------
+   Tři úrovně přístupu:
+     nepřihlášený   čte stav zásob (a nic víc)
+     skladník       zapisuje pohyby — naskladnění, výdej, přesun, inventura
+     správce        navíc položky, ceny, dodavatelé, místa a účty
+   Toto rozdělení je vynucené pravidly v databázi; tady se jen řídí,
+   co má uživatel vidět, aby mu aplikace nenabízela, co mu stejně neprojde.
+   ------------------------------------------------------------------- */
+const S = {
+  user:null, profile:null, profiles:[],
+  locations:[], items:[], variants:[], stock:[], suppliers:[], movements:[],
+  tab:'stock', editItem:null, editSup:null, editLoc:null, editUser:null,
+  qtyCtx:null, moveCtx:null, photoFile:null
+};
+const isMember = () => !!S.profile && S.profile.active === true;
+const isAdmin  = () => isMember() && S.profile.role === 'admin';
+const myName   = () => S.profile?.full_name || S.user?.email || '';
 
-  const { data: { user } } = await sb.auth.getSession();
-  S.user = user;
-  S.profile = user ? (await sb.from('profiles').select('*').eq('id', user.id).single()).data : null;
+async function loadProfile(){
+  S.profile = null;
+  if(!S.user) return;
+  const { data, error } = await sb.from('profiles').select('*').eq('id', S.user.id).maybeSingle();
+  if(!error) S.profile = data || null;
+}
 
-  const adm = S.profile?.role === 'admin';
-  const logged = !!S.user;
-  const mem = logged && S.profile?.active;
-
+function refreshAuthUI(){
+  const logged = !!S.user, mem = isMember(), adm = isAdmin();
   $('#btnLogin').classList.toggle('hide', logged);
-  $('#btnAccount').classList.toggle('hide', !logged);
   $('#btnLogout').classList.toggle('hide', !logged);
+  $('#btnAccount').classList.toggle('hide', !mem);
+  $('#roleText').textContent = !logged ? 'Režim prohlížení'
+    : !mem ? 'Bez přiděleného přístupu'
+    : (adm ? 'Správce · ' : 'Skladník · ') + myName();
+  $('#roleBadge .dot').style.background = adm ? '#7ee2a8' : mem ? '#ffd27d' : '#9fb8d6';
+
+  $('#noProfile').classList.toggle('hide', !(logged && !mem));
+  const needsName = mem && !String(S.profile.full_name || '').trim().includes(' ');
+  $('#namePrompt').classList.toggle('hide', !needsName);
+
   $('#btnNewItem').classList.toggle('hide', !adm);
   $('#btnNewLoc').classList.toggle('hide', !adm);
+  $('#btnNewSup').classList.toggle('hide', !adm);
 
-  if(!mem) {
-    $('#app').classList.remove('hide');
-    const shouldAsk = logged && !S.profile?.full_name;
-    if(shouldAsk) $('#namePrompt').classList.remove('hide');
-  } else {
-    $('#app').classList.remove('hide');
-    if(logged) loadAll();
+  $('#supLocked').classList.toggle('hide', mem);
+  $('#supPanel').classList.toggle('hide', !mem);
+  $('#mvLocked').classList.toggle('hide', mem);
+  $('#mvPanel').classList.toggle('hide', !mem);
+  $('#usrLocked').classList.toggle('hide', adm);
+  $('#usrPanel').classList.toggle('hide', !adm);
+  $$('.tab[data-tab="users"]').forEach(t => t.classList.toggle('hide', !adm));
+  if(S.tab === 'users' && !adm) showTab('stock');
+
+  $('#stockHint').textContent = mem
+    ? 'Kliknutím na číslo u daného místa zadáte naskladnění, výdej nebo inventuru. Každý zápis nese vaše jméno a zůstává v historii pohybů.'
+    : 'Prohlížíte sdílený přehled skladu. Pro úpravy se přihlaste vlastním účtem.';
+  render();
+}
+
+/* ---------------------- načtení dat --------------------------------- */
+async function loadAll(){
+  try{
+    const mem = isMember();
+    const itemsSrc = mem ? 'items' : 'items_public';
+    const [loc, it, va, st, mv] = await Promise.all([
+      sb.from('locations').select('*').order('sort_order').order('name'),
+      sb.from(itemsSrc).select('*').order('name'),
+      sb.from('variants').select('*').order('sort_order').order('label'),
+      sb.from('stock').select('*'),
+      mem ? sb.from('movements').select('*').order('created_at',{ascending:false}).limit(1000)
+          : Promise.resolve({data:[], error:null})
+    ]);
+    const bad = [loc,it,va,st,mv].find(r => r.error);
+    if(bad) throw bad.error;
+    S.locations = loc.data; S.items = it.data; S.variants = va.data;
+    S.stock = st.data;      S.movements = mv.data;
+    await loadProfiles();
+    showErr('#globalErr', '');
+    $('#lastSync').textContent = 'Aktualizováno ' + new Date().toLocaleTimeString('cs-CZ');
+    await loadSuppliers();
+    fillSelects(); render();
+  }catch(e){
+    showErr('#globalErr', 'Nepodařilo se načíst data: ' + (e.message || e) +
+      ' — zkontrolujte připojení k Supabase a to, že je spuštěný skript 01_schema.sql.');
   }
+}
+async function loadSuppliers(){
+  if(!isMember()){ S.suppliers = []; renderSuppliers(); return; }
+  const {data, error} = await sb.from('suppliers').select('*').order('name');
+  if(!error){ S.suppliers = data; renderSuppliers(); fillSupplierSelect(); }
+}
+async function loadProfiles(){
+  if(!isMember()){ S.profiles = []; return; }
+  const {data, error} = await sb.from('profiles').select('*').order('full_name');
+  if(!error){
+    S.profiles = data;
+    const mine = data.find(p => p.id === S.user?.id);
+    if(mine) S.profile = mine;
+  }
+}
 
-  if(!logged || !mem) return;
+/* ---------------------- odvozené údaje ------------------------------ */
+const locById = id => S.locations.find(l => l.id === id);
+const itemById = id => S.items.find(i => i.id === id);
+const varById  = id => S.variants.find(v => v.id === id);
+const profById = id => S.profiles.find(p => p.id === id);
+function authorOf(m){
+  const p = m.author_id ? profById(m.author_id) : null;
+  return p ? (p.full_name || p.email || '—') : (m.created_by || '—');
+}
+function qtyOf(variantId, locId){
+  const r = S.stock.find(s => s.variant_id === variantId && s.location_id === locId);
+  return r ? r.qty : 0;
+}
+function totalOf(variantId){
+  return S.stock.filter(s => s.variant_id === variantId).reduce((a,b)=>a+b.qty, 0);
+}
+function photoUrl(path){
+  if(!path) return null;
+  if(/^https?:/.test(path)) return path;
+  return sb.storage.from('merch-photos').getPublicUrl(path).data.publicUrl;
+}
 
-  // Subscribe to changes
-  sb_sub = sb.channel('inventory').on('postgres_changes', { event: '*', schema: 'public' }, () => loadAll()).subscribe();
+/* ---------------------- naplnění číselníků -------------------------- */
+function fillSelects(){
+  const cur = $('#fLoc').value;
+  $('#fLoc').innerHTML = '<option value="all">Všechna místa</option>' +
+    S.locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  $('#fLoc').value = cur || 'all';
+
+  const cats = [...new Set(S.items.map(i => i.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'cs'));
+  const curC = $('#fCat').value;
+  $('#fCat').innerHTML = '<option value="all">Všechny kategorie</option>' +
+    cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  $('#fCat').value = curC || 'all';
+  $('#catList').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
+
+  const opts = S.locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  $('#mvFrom').innerHTML = opts; $('#mvTo').innerHTML = opts;
+  fillSupplierSelect();
+}
+function fillSupplierSelect(){
+  $('#itSup').innerHTML = '<option value="">— nezadán —</option>' +
+    S.suppliers.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+}
+
+/* ---------------------- vykreslení skladu --------------------------- */
+function visibleLocations(){
+  const f = $('#fLoc').value;
+  return f === 'all' ? S.locations : S.locations.filter(l => l.id === f);
+}
+function render(){
+  if(!S.locations.length && !S.items.length){ renderStock(); return; }
+  renderStock(); renderMoves(); renderLocations(); renderSuppliers(); renderUsers();
+}
+
+function renderStock(){
+  const locs = visibleLocations();
+  const mem = isMember(), adm = isAdmin();
+  const q = norm($('#q').value), cat = $('#fCat').value, onlyLow = $('#fLow').checked;
+
+  // nákupní ceny vidí jen přihlášený — nepřihlášenému se sloupec s hodnotou
+  // vůbec nevykresluje, protože ta data k němu z databáze ani nedorazí
+  $('#theadStock').innerHTML = '<tr>' +
+    '<th>Položka / varianta</th>' +
+    locs.map(l => `<th class="num">${esc(l.name)}</th>`).join('') +
+    '<th class="num">Celkem</th><th class="num">Min.</th>' +
+    (mem ? '<th class="num">Hodnota</th>' : '') +
+    (mem ? '<th></th>' : '') + '</tr>';
+
+  const rows = [];
+  let totalPieces = 0, totalValue = 0;
+
+  // docházející zboží se počítá vždy globálně, nezávisle na filtrech
+  const lowList = S.variants.filter(v => {
+    const it = itemById(v.item_id);
+    return it && !it.archived && v.min_stock > 0 && totalOf(v.id) <= v.min_stock;
+  }).map(v => {
+    const it = itemById(v.item_id);
+    return `${it.name}${v.label !== '—' ? ' ' + v.label : ''} (${totalOf(v.id)}/${v.min_stock})`;
+  });
+
+  S.items.filter(i => !i.archived).forEach(item => {
+    if(cat !== 'all' && item.category !== cat) return;
+    const vars = S.variants.filter(v => v.item_id === item.id);
+    const matchItem = !q || norm(item.name).includes(q) || norm(item.category).includes(q)
+                      || norm(item.description).includes(q);
+    const shown = vars.filter(v => {
+      if(!(matchItem || norm(v.label).includes(q) || norm(v.sku).includes(q))) return false;
+      if(onlyLow){ const t = totalOf(v.id); return v.min_stock > 0 && t <= v.min_stock; }
+      return true;
+    });
+    if(!shown.length) return;
+
+    const img = photoUrl(item.photo_path);
+    const sup = S.suppliers.find(s => s.id === item.supplier_id);
+    const meta = [item.category, item.sale_price != null ? czk(item.sale_price) : null,
+                  sup ? sup.name : null].filter(Boolean).join(' · ');
+    const span = 1 + locs.length + 2 + (mem ? 2 : 0);
+    rows.push(`<tr class="item-head"><td colspan="${span}">
+      <div class="item-title">
+        ${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy">`
+              : '<div class="thumb-ph">📦</div>'}
+        <div style="flex:1">
+          <b>${esc(item.name)}</b>
+          ${meta ? `<div class="item-meta">${esc(meta)}</div>` : ''}
+          ${item.description ? `<div class="item-meta">${esc(item.description)}</div>` : ''}
+        </div>
+        ${adm ? `<button class="btn-sm" data-edit-item="${item.id}">Upravit</button>` : ''}
+      </div></td></tr>`);
+
+    shown.forEach(v => {
+      const totAll = totalOf(v.id);                                     // přes všechna místa
+      const tot = locs.reduce((a,l) => a + qtyOf(v.id, l.id), 0);       // jen zobrazená místa
+      const low = v.min_stock > 0 && totAll <= v.min_stock;
+      const val = (item.purchase_price || 0) * tot;
+      totalPieces += tot; totalValue += val;
+
+      const cells = locs.map(l => {
+        const n = qtyOf(v.id, l.id);
+        return `<td class="num">` + (mem
+          ? `<button class="qty-btn ${n===0?'qty-0':''}" data-qty="${v.id}|${l.id}" title="Upravit množství">${n}</button>`
+          : `<span class="qty ${n===0?'qty-0':''}">${n}</span>`) + `</td>`;
+      }).join('');
+
+      rows.push(`<tr>
+        <td class="var-label">${esc(v.label)}${v.sku ? ` <span class="small muted">${esc(v.sku)}</span>` : ''}</td>
+        ${cells}
+        <td class="num total ${low?'low':''}">${tot}</td>
+        <td class="num small muted">${v.min_stock || ''}</td>
+        ${mem ? `<td class="num small">${item.purchase_price ? czk(val) : ''}</td>` : ''}
+        ${mem ? `<td class="num"><button class="btn-sm" data-move="${v.id}">Přesun</button></td>` : ''}
+      </tr>`);
+    });
+  });
+
+  $('#tbodyStock').innerHTML = rows.length ? rows.join('') :
+    `<tr><td colspan="99"><div class="empty"><div class="ico">📦</div>
+      <div>${S.items.length ? 'Žádná položka neodpovídá filtru.' : 'Sklad je zatím prázdný.'}</div>
+      ${adm && !S.items.length ? '<p class="small">Začněte tlačítkem „+ Nová položka“.</p>' : ''}
+    </div></td></tr>`;
+
+  const varCount = S.variants.filter(v => { const i = itemById(v.item_id); return i && !i.archived; }).length;
+  $('#stats').innerHTML = `
+    <div class="stat"><div class="k">Druhů zboží</div><div class="v">${S.items.filter(i=>!i.archived).length}</div>
+      <div class="s">${varCount} skladových variant</div></div>
+    <div class="stat"><div class="k">Kusů celkem</div><div class="v">${num(totalPieces)}</div>
+      <div class="s">${$('#fLoc').value==='all' ? 'všechna místa' : 'filtr: ' + (locById($('#fLoc').value)?.name || '')}</div></div>
+    ${mem ? `<div class="stat"><div class="k">Hodnota zásob</div><div class="v">${czk(totalValue)}</div>
+      <div class="s">v nákupních cenách</div></div>` : ''}
+    <div class="stat"><div class="k">Docházející</div><div class="v" style="${lowList.length?'color:var(--warn)':''}">${lowList.length}</div>
+      <div class="s">pod minimální zásobou</div></div>`;
+
+  const la = $('#lowAlert');
+  if(lowList.length){ la.classList.remove('hide');
+    la.innerHTML = '<b>Doporučeno doobjednat:</b> ' + esc(lowList.slice(0,12).join(', ')) +
+      (lowList.length > 12 ? ` a dalších ${lowList.length-12}` : ''); }
+  else la.classList.add('hide');
+}
+
+/* ---------------------- historie pohybů ----------------------------- */
+const TYPE_LBL = {in:'Naskladnění', out:'Výdej / prodej', move:'Přesun', adjust:'Korekce inventury'};
+function renderMoves(){
+  if(!isMember()){ $('#tbodyMoves').innerHTML = ''; return; }
+  const q = norm($('#qm').value), ft = $('#fType').value;
+  const rows = S.movements.filter(m => {
+    if(ft !== 'all' && m.type !== ft) return false;
+    if(!q) return true;
+    const v = varById(m.variant_id), i = v && itemById(v.item_id);
+    return norm(i?.name).includes(q) || norm(v?.label).includes(q) || norm(m.note).includes(q)
+        || norm(authorOf(m)).includes(q);
+  }).map(m => {
+    const v = varById(m.variant_id), i = v && itemById(v.item_id);
+    const f = m.from_location_id ? locById(m.from_location_id)?.name : null;
+    const t = m.to_location_id   ? locById(m.to_location_id)?.name   : null;
+    const dir = m.type === 'move' ? `${esc(f||'?')} → ${esc(t||'?')}` : esc(t || f || '');
+    const sign = m.qty < 0 ? '' : (m.type === 'out' ? '−' : (m.type === 'adjust' ? '+' : '+'));
+    return `<tr>
+      <td class="small">${dt(m.created_at)}</td>
+      <td>${esc(i?.name || '—')}</td>
+      <td>${esc(v?.label || '')}</td>
+      <td><span class="pill ${m.type==='out'?'pill-warn':m.type==='in'?'pill-ok':'pill-grey'}">${TYPE_LBL[m.type]}</span></td>
+      <td class="num">${sign}${Math.abs(m.qty)}</td>
+      <td class="small">${dir}</td>
+      <td class="small muted">${esc(m.note || '')}</td>
+      <td class="small muted">${esc(authorOf(m))}</td></tr>`;
+  });
+  $('#tbodyMoves').innerHTML = rows.length ? rows.join('') :
+    '<tr><td colspan="8"><div class="empty"><div class="ico">🕑</div><div>Zatím žádné pohyby.</div></div></td></tr>';
+}
+
+/* ---------------------- místa --------------------------------------- */
+function renderLocations(){
+  const mem = isMember(), adm = isAdmin();
+  $('#tbodyLoc').innerHTML = S.locations.map(l => {
+    const recs = S.stock.filter(s => s.location_id === l.id && s.qty !== 0);
+    const pieces = recs.reduce((a,b)=>a+b.qty, 0);
+    const value = recs.reduce((a,b)=>{
+      const v = varById(b.variant_id); const i = v && itemById(v.item_id);
+      return a + (i?.purchase_price || 0) * b.qty; }, 0);
+    return `<tr>
+      <td><b>${esc(l.name)}</b></td>
+      <td class="small muted">${esc(l.note || '')}</td>
+      <td class="num">${recs.length}</td>
+      <td class="num">${num(pieces)}</td>
+      <td class="num">${mem ? czk(value) : ''}</td>
+      <td class="num">${adm ? `<button class="btn-sm" data-edit-loc="${l.id}">Upravit</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---------------------- uživatelé ----------------------------------- */
+const ROLE_LBL = {admin:'Správce', stock:'Skladník'};
+function renderUsers(){
+  if(!isAdmin()) return;
+  const stats = {};
+  S.movements.forEach(m => {
+    if(!m.author_id) return;
+    const s = stats[m.author_id] || (stats[m.author_id] = {n:0, last:null});
+    s.n++;
+    if(!s.last || m.created_at > s.last) s.last = m.created_at;
+  });
+  const rows = S.profiles.map(p => {
+    const s = stats[p.id] || {n:0, last:null};
+    const me = p.id === S.user?.id;
+    return `<tr${p.active ? '' : ' style="opacity:.55"'}>
+      <td><b>${esc(p.full_name || '—')}</b>${me ? ' <span class="small muted">(to jste vy)</span>' : ''}</td>
+      <td class="small muted">${esc(p.email || '')}</td>
+      <td><span class="pill ${p.role==='admin'?'pill-ok':'pill-grey'}">${ROLE_LBL[p.role] || p.role}</span></td>
+      <td class="small">${p.active ? 'aktivní' : 'neaktivní'}</td>
+      <td class="num">${s.n ? num(s.n) : ''}</td>
+      <td class="small muted">${s.last ? dt(s.last) : ''}</td>
+      <td class="num"><button class="btn-sm" data-edit-user="${p.id}">Upravit</button></td>
+    </tr>`;
+  });
+  $('#tbodyUsers').innerHTML = rows.length ? rows.join('') :
+    '<tr><td colspan="7"><div class="empty"><div class="ico">👤</div><div>Zatím žádné účty.</div></div></td></tr>';
+}
+
+/* ---------------------- dodavatelé ---------------------------------- */
+function renderSuppliers(){
+  if(!isMember()) return;
+  const q = norm($('#qs').value);
+  const list = S.suppliers.filter(s => !s.archived).filter(s => !q ||
+    norm(s.name).includes(q) || norm(s.category).includes(q) || norm(s.contact_person).includes(q) ||
+    norm(s.email).includes(q) || norm(s.note).includes(q));
+  $('#supGrid').innerHTML = list.length ? list.map(s => {
+    const used = S.items.filter(i => i.supplier_id === s.id).length;
+    const line = (k, v, href) => v ? `<dt>${k}</dt><dd>${href ? `<a href="${esc(href)}">${esc(v)}</a>` : esc(v)}</dd>` : '';
+    return `<div class="sup">
+      <h4>${esc(s.name)}</h4>
+      ${s.category ? `<div class="cat">${esc(s.category)}</div>` : ''}
+      <dl>
+        ${line('Kontakt', s.contact_person)}
+        ${line('Telefon', s.phone, 'tel:'+(s.phone||''))}
+        ${line('E-mail', s.email, 'mailto:'+(s.email||''))}
+        ${line('Web', s.website, s.website)}
+        ${line('Adresa', s.address)}
+        ${line('IČO', s.ico)}
+        ${line('DIČ', s.dic)}
+        ${line('Podmínky', s.payment_terms)}
+        ${line('Poznámka', s.note)}
+      </dl>
+      <div class="acts">
+        ${isAdmin() ? `<button class="btn-sm" data-edit-sup="${s.id}">Upravit</button>` : ''}
+        <span class="spacer"></span>
+        <span class="pill pill-grey" style="align-self:center">${used} položek</span>
+      </div></div>`;
+  }).join('') : `<div class="empty" style="grid-column:1/-1"><div class="ico">📇</div>
+      <div>Zatím žádní dodavatelé.</div>${isAdmin() ? '<p class="small">Přidejte je tlačítkem „+ Nový dodavatel“.</p>' : ''}</div>`;
+}
+
+/* ---------------------- záložky a filtry ---------------------------- */
+function showTab(name){
+  S.tab = name;
+  $$('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === name));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+}
+$$('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+['#q','#fLoc','#fCat'].forEach(s => $(s).oninput = renderStock);
+$('#fLow').onchange = renderStock;
+$('#qm').oninput = renderMoves; $('#fType').onchange = renderMoves;
+$('#qs').oninput = renderSuppliers;
+$$('[data-close]').forEach(b => b.onclick = () => b.closest('.overlay').classList.remove('open'));
+$$('.overlay').forEach(o => o.onclick = e => { if(e.target === o) o.classList.remove('open'); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape') $$('.overlay').forEach(o=>o.classList.remove('open')); });
+
+/* ---------------------- přihlášení ---------------------------------- */
+$('#btnLogin').onclick = () => {
+  showErr('#liErr',''); showErr('#liMsg','');
+  openM('#mLogin'); setTimeout(()=>$('#liMail').focus(),80);
 };
-
-const itemById = (id) => S.items.find(i => i.id === id);
-const varById = (id) => S.variants.find(v => v.id === id);
-
-const downloadCsv = (filename, rows) => {
-  const csv = rows.map(r => r.map(c => '"' + (c+'').replace(/"/g,'""') + '"').join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+$('#liMail').onkeydown = e => { if(e.key === 'Enter') $('#liPass').focus(); };
+$('#liPass').onkeydown = e => { if(e.key === 'Enter') $('#liGo').click(); };
+$('#liGo').onclick = async () => {
+  const email = $('#liMail').value.trim(), password = $('#liPass').value;
+  if(!email){ showErr('#liErr','Zadejte svůj e-mail.'); return; }
+  if(!password){ showErr('#liErr','Zadejte heslo.'); return; }
+  $('#liGo').disabled = true;
+  const {error} = await sb.auth.signInWithPassword({email, password});
+  $('#liGo').disabled = false;
+  if(error){ showErr('#liErr','Přihlášení se nezdařilo: ' + error.message); return; }
+  $('#liPass').value = ''; closeM('#mLogin');
+  const { data } = await sb.auth.getUser();
+  S.user = data.user || null;
+  await loadProfile(); refreshAuthUI(); await loadAll();
+  toast(isMember() ? 'Přihlášen/a: ' + myName() : 'Přihlášeno, účet ale nemá přidělený přístup', !isMember());
 };
-
-$('#cfgUrl').value = CONFIG.url;
-$('#cfgKey').value = CONFIG.key;
-$('#cfgSave').onclick = () => {
-  localStorage.setItem('cfgUrl', $('#cfgUrl').value);
-  localStorage.setItem('cfgKey', $('#cfgKey').value);
-  location.reload();
+$('#liForgot').onclick = async e => {
+  e.preventDefault();
+  const email = $('#liMail').value.trim();
+  if(!email){ showErr('#liErr','Nejdřív vyplňte svůj e-mail, pošleme na něj odkaz.'); return; }
+  showErr('#liErr','');
+  const {error} = await sb.auth.resetPasswordForEmail(email, {redirectTo: location.href.split('#')[0]});
+  if(error){ showErr('#liErr','Odkaz se nepodařilo odeslat: ' + error.message); return; }
+  showErr('#liMsg','Pokud účet s tímto e-mailem existuje, přišel na něj odkaz pro nastavení nového hesla.');
 };
-
-$('#btnLogin').onclick = () => showModal('mLogin');
-$('#btnAccount').onclick = () => showModal('mAcc');
 $('#btnLogout').onclick = async () => {
   await sb.auth.signOut();
-  location.reload();
+  S.user = null; S.profile = null; S.profiles = [];
+  toast('Odhlášeno'); refreshAuthUI(); await loadAll();
 };
 
-$('#liGo').onclick = async () => {
-  const email = $('#liMail').value, pass = $('#liPass').value;
-  if(!email || !pass) return showErr('#liErr','Vyplnite email a heslo');
-  hideErr('#liErr');
-  const { data, error } = await sb.auth.signInWithPassword({email, password:pass});
-  if(error) return showErr('#liErr', error.message);
-  hideModal();
-  location.reload();
-};
-
-$('#liForgot').onclick = (e) => {
-  e.preventDefault();
-  const email = prompt('Vase emailova adresa:');
-  if(!email) return;
-  sb.auth.resetPasswordForEmail(email).then(({error}) => {
-    if(error) showErr('#liErr', error.message);
-    else showErr('#liMsg','Odkaz na zmenu hesla jste si poslali na email');
-  });
-};
-
-const checkReset = async () => {
-  const hash = window.location.hash.slice(1);
-  const params = new URLSearchParams(hash);
-  if(params.get('type') === 'recovery') {
-    showModal('mReset');
-    $('#rsGo').onclick = async () => {
-      const p1 = $('#rsPass').value, p2 = $('#rsPass2').value;
-      if(!p1 || p1.length < 8) return showErr('#rsErr', 'Heslo je prilis kratke');
-      if(p1 !== p2) return showErr('#rsErr', 'Hesla se neshoduji');
-      const {error} = await sb.auth.updateUser({password:p1});
-      if(error) showErr('#rsErr', error.message);
-      else { hideModal(); history.replaceState({}, '', '/'); location.reload(); }
-    };
-  }
-};
-checkReset();
-
-$('#npFix').onclick = () => showModal('mAcc');
-
+/* ---------------------- můj účet ------------------------------------ */
+$('#btnAccount').onclick = () => openAccount();
+$('#npFix').onclick = () => openAccount();
+function openAccount(){
+  if(!isMember()) return;
+  $('#accWho').innerHTML = `${esc(S.user.email)} · role <b>${esc(ROLE_LBL[S.profile.role] || S.profile.role)}</b>`;
+  $('#accName').value = S.profile.full_name || '';
+  $('#accPass').value = ''; $('#accPass2').value = ''; showErr('#accErr','');
+  openM('#mAcc'); setTimeout(()=>$('#accName').focus(),80);
+}
 $('#accSave').onclick = async () => {
-  const name = $('#accName').value, p1 = $('#accPass').value, p2 = $('#accPass2').value;
-  if(!name) return showErr('#accErr','Vyplnte jmeno');
-  hideErr('#accErr');
-  if(p1 || p2) {
-    if(p1.length < 8) return showErr('#accErr', 'Heslo je prilis kratke');
-    if(p1 !== p2) return showErr('#accErr','Hesla se neshoduji');
-    const {error} = await sb.auth.updateUser({password:p1});
-    if(error) return showErr('#accErr', error.message);
+  const name = $('#accName').value.trim();
+  const p1 = $('#accPass').value, p2 = $('#accPass2').value;
+  if(!name){ showErr('#accErr','Vyplňte prosím své jméno.'); return; }
+  if(p1 || p2){
+    if(p1 !== p2){ showErr('#accErr','Hesla se neshodují.'); return; }
+    if(p1.length < 8){ showErr('#accErr','Heslo musí mít aspoň 8 znaků.'); return; }
   }
-  const {error} = await sb.from('profiles').update({full_name:name}).eq('id',S.user.id);
-  if(error) showErr('#accErr', error.message);
-  else { hideModal(); loadAll(); toast('Ulozeno'); S.profile.full_name = name; }
+  $('#accSave').disabled = true;
+  const up = await sb.from('profiles').update({full_name:name}).eq('id', S.user.id);
+  if(up.error){ $('#accSave').disabled = false; showErr('#accErr', up.error.message); return; }
+  if(p1){
+    const pw = await sb.auth.updateUser({password:p1});
+    if(pw.error){ $('#accSave').disabled = false; showErr('#accErr','Jméno uloženo, heslo ne: ' + pw.error.message); return; }
+  }
+  $('#accSave').disabled = false;
+  closeM('#mAcc'); toast(p1 ? 'Jméno i heslo uloženo' : 'Jméno uloženo');
+  await loadProfile(); refreshAuthUI(); await loadAll();
 };
 
-$('#npFix').onclick = () => showModal('mAcc');
+/* ---------------------- obnova hesla z e-mailu ----------------------- */
+$('#rsGo').onclick = async () => {
+  const p1 = $('#rsPass').value, p2 = $('#rsPass2').value;
+  if(p1 !== p2){ showErr('#rsErr','Hesla se neshodují.'); return; }
+  if(p1.length < 8){ showErr('#rsErr','Heslo musí mít aspoň 8 znaků.'); return; }
+  $('#rsGo').disabled = true;
+  const {error} = await sb.auth.updateUser({password:p1});
+  $('#rsGo').disabled = false;
+  if(error){ showErr('#rsErr', error.message); return; }
+  closeM('#mReset'); toast('Nové heslo nastaveno');
+  await loadProfile(); refreshAuthUI(); await loadAll();
+};
 
+/* ---------------------- správa účtů (jen správce) -------------------- */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-edit-user]'); if(!b) return;
+  const p = profById(b.dataset.editUser); if(!p) return;
+  S.editUser = p;
+  $('#usWho').textContent = p.email || '';
+  $('#usName').value = p.full_name || '';
+  $('#usRole').value = p.role;
+  $('#usActive').checked = !!p.active;
+  showErr('#usErr','');
+  openM('#mUser');
+});
 $('#usSave').onclick = async () => {
-  const id = S.editUser.id, name = $('#usName').value, role = $('#usRole').value, active = $('#usActive').checked;
-  if(!name) return showErr('#usErr', 'Vyplnte jmeno');
-  const {error} = await sb.from('profiles').update({full_name:name, role, active}).eq('id', id);
-  if(error) showErr('#usErr', error.message);
-  else { hideModal(); loadAll(); toast('Uzivatel upraven'); }
+  const p = S.editUser; if(!p) return;
+  const payload = {
+    full_name: $('#usName').value.trim() || null,
+    role: $('#usRole').value,
+    active: $('#usActive').checked
+  };
+  if(p.id === S.user.id && (payload.role !== 'admin' || !payload.active)){
+    const others = S.profiles.filter(x => x.id !== p.id && x.role === 'admin' && x.active).length;
+    if(!others){ showErr('#usErr','Jste jediný aktivní správce — nejdřív jmenujte jiného.'); return; }
+    if(!confirm('Opravdu si chcete odebrat práva správce? Dál už účty ani ceny upravovat nebudete.')) return;
+  }
+  $('#usSave').disabled = true;
+  const {error} = await sb.from('profiles').update(payload).eq('id', p.id);
+  $('#usSave').disabled = false;
+  if(error){ showErr('#usErr', error.message); return; }
+  closeM('#mUser'); toast('Účet upraven');
+  await loadProfile(); refreshAuthUI(); await loadAll();
 };
 
-const editItem = (item) => { S.editItem = item; showModal('mItem'); $('#itTitle').textContent = (item ? 'Uprava' : 'Nova') + ' polozka'; };
+/* ---------------------- změna množství ------------------------------ */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-qty]'); if(!b) return;
+  const [vid, lid] = b.dataset.qty.split('|');
+  const v = varById(vid), i = itemById(v.item_id), l = locById(lid);
+  S.qtyCtx = {vid, lid, cur: qtyOf(vid, lid)};
+  $('#qCtx').innerHTML = `<b>${esc(i.name)}</b>${v.label !== '—' ? ' · ' + esc(v.label) : ''} · místo <b>${esc(l.name)}</b>
+    · aktuálně <b>${S.qtyCtx.cur} ks</b>`;
+  $('#qOp').value = 'in'; $('#qVal').value = 1; $('#qNote').value = ''; showErr('#qErr','');
+  syncQtyLabel(); openM('#mQty'); setTimeout(()=>$('#qVal').select(),80);
+});
+function syncQtyLabel(){
+  const op = $('#qOp').value;
+  $('#qLbl').textContent = op === 'adjust' ? 'Skutečný stav po inventuře (ks)' : 'Počet kusů';
+  $('#qVal').value = op === 'adjust' ? (S.qtyCtx ? S.qtyCtx.cur : 0) : 1;
+}
+$('#qOp').onchange = syncQtyLabel;
+$('#qGo').onclick = async () => {
+  const {vid, lid, cur} = S.qtyCtx;
+  const op = $('#qOp').value, val = parseInt($('#qVal').value, 10), note = $('#qNote').value.trim() || null;
+  if(isNaN(val) || val < 0){ showErr('#qErr','Zadejte platné číslo.'); return; }
+  let rec;
+  if(op === 'in'){
+    if(val === 0){ showErr('#qErr','Zadejte počet kusů větší než nula.'); return; }
+    rec = {variant_id:vid, type:'in', qty:val, to_location_id:lid, note};
+  } else if(op === 'out'){
+    if(val === 0){ showErr('#qErr','Zadejte počet kusů větší než nula.'); return; }
+    if(val > cur){ showErr('#qErr',`Na místě je jen ${cur} ks. Pro opravu evidence použijte inventuru.`); return; }
+    rec = {variant_id:vid, type:'out', qty:val, from_location_id:lid, note};
+  } else {
+    const d = val - cur;
+    if(d === 0){ showErr('#qErr','Stav se nemění, není co zapsat.'); return; }
+    rec = {variant_id:vid, type:'adjust', qty:d, to_location_id:lid,
+           note: note || `inventura: ${cur} → ${val} ks`};
+  }
+  // podpis zápisu: rozhodující je author_id, které databáze porovnává
+  // s přihlášenou identitou; e-mail je jen čitelná stopa navíc
+  rec.author_id  = S.user?.id || null;
+  rec.created_by = S.user?.email || null;
+  $('#qGo').disabled = true;
+  const {error} = await sb.from('movements').insert(rec);
+  $('#qGo').disabled = false;
+  if(error){ showErr('#qErr', error.message); return; }
+  closeM('#mQty'); toast('Pohyb zapsán'); await loadAll();
+};
 
-$('#itAddVar').onclick = () => {
-  const vars = S.editItem?.id ? S.variants.filter(v => v.item_id === S.editItem.id) : [];
-  const idx = vars.length + 1;
-  const html = `<div class="var-row" data-temp-id="temp_${idx}">
-    <input class="itVarLabel" placeholder="S, M, L, XL; nebo popis varianty">
-    <input class="itVarSku" placeholder="SKU">
-    <input class="itVarMin" type="number" min="0" step="1" value="0">
-    <button class="btn-sm" onclick="$(this).closest('.var-row').remove()">-</button>
+/* ---------------------- přesun -------------------------------------- */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-move]'); if(!b) return;
+  const v = varById(b.dataset.move), i = itemById(v.item_id);
+  S.moveCtx = {vid: v.id};
+  $('#mvCtx').innerHTML = `<b>${esc(i.name)}</b>${v.label !== '—' ? ' · ' + esc(v.label) : ''} — ` +
+    S.locations.map(l => `${esc(l.name)}: <b>${qtyOf(v.id, l.id)}</b>`).join(' · ');
+  $('#mvQty').value = 1; $('#mvNote').value = ''; showErr('#mvErr','');
+  if(S.locations[1]) $('#mvTo').value = S.locations[1].id;
+  openM('#mMove');
+});
+$('#mvGo').onclick = async () => {
+  const vid = S.moveCtx.vid, from = $('#mvFrom').value, to = $('#mvTo').value;
+  const qty = parseInt($('#mvQty').value, 10);
+  if(from === to){ showErr('#mvErr','Zdroj a cíl musí být různá místa.'); return; }
+  if(!qty || qty < 1){ showErr('#mvErr','Zadejte počet kusů.'); return; }
+  const avail = qtyOf(vid, from);
+  if(qty > avail){ showErr('#mvErr',`Na místě „${locById(from)?.name || '?'}“ je jen ${avail} ks.`); return; }
+  $('#mvGo').disabled = true;
+  const {error} = await sb.from('movements').insert({variant_id:vid, type:'move', qty,
+    from_location_id:from, to_location_id:to, note:$('#mvNote').value.trim() || null,
+    author_id:S.user?.id || null, created_by:S.user?.email || null});
+  $('#mvGo').disabled = false;
+  if(error){ showErr('#mvErr', error.message); return; }
+  closeM('#mMove'); toast('Zboží přesunuto'); await loadAll();
+};
+
+/* ---------------------- položka: formulář --------------------------- */
+function varRowHtml(v = {}){
+  return `<div class="var-row" data-vid="${v.id || ''}">
+    <input class="v-label" value="${esc(v.label ?? '')}" placeholder="S / M / L nebo —">
+    <input class="v-sku" value="${esc(v.sku ?? '')}" placeholder="kód">
+    <input class="v-min" type="number" min="0" step="1" value="${v.min_stock ?? 0}">
+    <button class="btn-sm btn-danger v-del" type="button" title="Odebrat variantu">×</button>
   </div>`;
-  $('#itVars').insertAdjacentHTML('beforeend', html);
-};
-
-$('#itPhoto').onchange = (e) => {
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const maxW = 300, maxH = 300;
-      let w = img.width, h = img.height;
-      if(w > h) { h = Math.round(h * maxW / w); w = maxW; } else { w = Math.round(w * maxH / h); h = maxH; }
-      canvas.width = w;
-      canvas.height = h;
-      ctx.drawImage(img, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      S.editItem.photo = dataUrl;
-      $('#itPhotoPrev').innerHTML = `<img src="${dataUrl}" style="max-width:100%;border-radius:8px;border:1px solid var(--line)">`;
-    };
-    img.src = ev.target.result;
-  };
-  reader.readAsDataURL(file);
-};
-
-$('#itSave').onclick = async () => {
-  const name = $('#itName').value, desc = $('#itDesc').value, cat = $('#itCat').value,
-        buy = parseFloat($('#itBuy').value) || null, sell = parseFloat($('#itSell').value) || null,
-        sup_id = $('#itSup').value || null;
-  if(!name) return showErr('#itErr', 'Vyplnte nazev');
-  hideErr('#itErr');
-  
-  if(S.editItem) {
-    const {error} = await sb.from('items').update({name, description:desc, category:cat, purchase_price:buy, sale_price:sell, supplier_id:sup_id, photo:S.editItem.photo}).eq('id', S.editItem.id);
-    if(error) return showErr('#itErr', error.message);
-  } else {
-    const {data, error} = await sb.from('items').insert({name, description:desc, category:cat, purchase_price:buy, sale_price:sell, supplier_id:sup_id, photo:S.editItem?.photo||null, created_by:S.user.email}).select();
-    if(error) return showErr('#itErr', error.message);
-    S.editItem = data[0];
+}
+$('#itAddVar').onclick = () => $('#itVars').insertAdjacentHTML('beforeend', varRowHtml({label:'', min_stock:0}));
+document.addEventListener('click', e => {
+  if(e.target.classList.contains('v-del')){
+    const rows = $('#itVars').children;
+    if(rows.length <= 1){ toast('Položka musí mít aspoň jednu variantu', true); return; }
+    e.target.closest('.var-row').remove();
   }
-
-  // Varianty
-  const varRows = $$('#itVars .var-row');
-  const oldVars = S.editItem.id ? S.variants.filter(v => v.item_id === S.editItem.id) : [];
-  const newVars = [];
-  
-  for(let row of varRows) {
-    const label = row.querySelector('.itVarLabel').value || '-';
-    const sku = row.querySelector('.itVarSku').value || null;
-    const min_stock = parseInt(row.querySelector('.itVarMin').value) || 0;
-    const tempId = row.dataset.tempId;
-    
-    if(tempId?.startsWith('temp_')) {
-      const {data, error} = await sb.from('variants').insert({item_id:S.editItem.id, label, sku, min_stock}).select();
-      if(error) return showErr('#itErr', error.message);
-      newVars.push(data[0]);
-    } else {
-      const varId = tempId;
-      const {error} = await sb.from('variants').update({label, sku, min_stock}).eq('id', varId);
-      if(error) return showErr('#itErr', error.message);
-      const v = S.variants.find(vv => vv.id === varId);
-      if(v) Object.assign(v, {label, sku, min_stock});
-    }
-  }
-  
-  for(let v of oldVars) {
-    if(!varRows.some(r => r.dataset.tempId === v.id)) {
-      const {error} = await sb.from('variants').delete().eq('id', v.id);
-      if(error) showErr('#itErr', error.message);
-    }
-  }
-
-  hideModal();
-  loadAll();
-  toast('Polozka ulozena');
-};
-
-$('#itDel').onclick = async () => {
-  if(!confirm('Opravdu smazat tuto polozku?')) return;
-  const {error} = await sb.from('items').delete().eq('id', S.editItem.id);
-  if(error) showErr('#itErr', error.message);
-  else { hideModal(); loadAll(); toast('Polozka smazana'); }
-};
-
-$('#suSave').onclick = async () => {
-  const name = $('#suName').value, cat = $('#suCat').value, person = $('#suPerson').value, phone = $('#suPhone').value,
-        mail = $('#suMail').value, web = $('#suWeb').value, addr = $('#suAddr').value,
-        ico = $('#suIco').value, dic = $('#suDic').value, note = $('#suNote').value;
-  if(!name) return showErr('#suErr', 'Vyplnte nazev firmy');
-  hideErr('#suErr');
-  
-  if(S.editSup) {
-    const {error} = await sb.from('suppliers').update({name, category:cat, person, phone, email:mail, website:web, address:addr, ico, dic, note}).eq('id', S.editSup.id);
-    if(error) return showErr('#suErr', error.message);
-  } else {
-    const {error} = await sb.from('suppliers').insert({name, category:cat, person, phone, email:mail, website:web, address:addr, ico, dic, note}).select();
-    if(error) return showErr('#suErr', error.message);
-  }
-  hideModal();
-  loadAll();
-  toast('Dodavatel ulozena');
-};
-
-$('#suDel').onclick = async () => {
-  if(!confirm('Opravdu smazat dodavatele?')) return;
-  const {error} = await sb.from('suppliers').delete().eq('id', S.editSup.id);
-  if(error) showErr('#suErr', error.message);
-  else { hideModal(); loadAll(); toast('Dodavatel smazan'); }
-};
-
-$('#loSave').onclick = async () => {
-  const name = $('#loName').value, note = $('#loNote').value;
-  if(!name) return showErr('#loErr', 'Vyplnte nazev mista');
-  hideErr('#loErr');
-  
-  if(S.editLoc) {
-    const {error} = await sb.from('locations').update({name, note}).eq('id', S.editLoc.id);
-    if(error) return showErr('#loErr', error.message);
-  } else {
-    const {error} = await sb.from('locations').insert({name, note}).select();
-    if(error) return showErr('#loErr', error.message);
-  }
-  hideModal();
-  loadAll();
-  toast('Misto ulozena');
-};
-
-$('#loDel').onclick = async () => {
-  if(!confirm('Opravdu smazat toto misto?')) return;
-  const {error} = await sb.from('locations').delete().eq('id', S.editLoc.id);
-  if(error) showErr('#loErr', error.message);
-  else { hideModal(); loadAll(); toast('Misto smazano'); }
-};
-
-$$('input[id^="liMail"], input[id^="liPass"]').forEach(e => e.addEventListener('keypress', (ev) => { if(ev.key === 'Enter') $('#liGo').click(); }));
-$$('input[id^="accName"]').forEach(e => e.addEventListener('keypress', (ev) => { if(ev.key === 'Enter') $('#accSave').click(); }));
-$$('input[id^="qVal"]').forEach(e => e.addEventListener('keypress', (ev) => { if(ev.key === 'Enter') $('#qGo').click(); }));
-
-$('#mLogin').addEventListener('click', (e) => { if(e.target === $('#mLogin')) hideModal(); });
-
-const qtys = async () => {
-  const id = prompt('Varian ID:');
-  if(!id) return;
-  const v = varById(id);
-  if(!v) return alert('Varianta nenalezena');
-  const i = itemById(v.item_id);
-  if(!i) return;
-  
-  $('#qCtx').innerHTML = `<b>${i.name}</b> / ${v.label}`;
-  showModal('mQty');
-  
-  $('#qOp').addEventListener('change', () => {
-    const op = $('#qOp').value;
-    $('#qLbl').textContent = op === 'adjust' ? 'Presny stav (kusy)' : 'Počet kusu';
-  });
-  
-  $('#qGo').onclick = async () => {
-    const op = $('#qOp').value, qty = parseInt($('#qVal').value) || 0, note = $('#qNote').value;
-    if(qty <= 0 && op !== 'adjust') return showErr('#qErr', 'Vyplnte mnozstvi');
-    hideErr('#qErr');
-    
-    let type = op, from_loc = null, to_loc = null, newQty = qty;
-    if(op === 'adjust') {
-      const tot = totalOf(id);
-      type = qty > tot ? 'in' : qty < tot ? 'out' : 'adjust';
-      qty = Math.abs(qty - tot);
-    }
-    
-    const firstLoc = S.locations[0]?.id;
-    if(op === 'in' || type === 'in') to_loc = firstLoc;
-    else if(op === 'out' || type === 'out') from_loc = firstLoc;
-    
-    const {error} = await sb.from('movements').insert({variant_id:id, type, qty, from_location_id:from_loc, to_location_id:to_loc, note:note||null, author_id:S.user?.id||null, created_by:S.user?.email||null}).select();
-    if(error) showErr('#qErr', error.message);
-    else { hideModal(); loadAll(); toast('Pohyb ulozena'); }
-  };
-};
-
-const renderTable = () => {
-  const q = norm($('#q')?.value || '');
-  const locFilter = $('#fLoc')?.value;
-  const catFilter = $('#fCat')?.value;
-  const lowOnly = $('#fLow')?.checked;
-  const adm = S.profile?.role === 'admin';
-
-  const html = S.items.filter(i => !q || norm(i.name).includes(q) || norm(i.category).includes(q)
-                      || norm(i.description).includes(q)
-                      || S.variants.filter(v => v.item_id === i.id).some(v => norm(v.label).includes(q) || norm(v.sku).includes(q)))
-        .filter(i => !catFilter || catFilter === 'all' || i.category === catFilter)
-        .map(i => `<tr class="item-head"><td class="item-title"><div class="thumb${i.photo?'':'ph'}">${i.photo?`<img src="${i.photo}">`:i.name.charAt(0)}</div><b>${i.name}</b><p class="item-meta">${i.category?`<span class="pill pill-grey">${i.category}</span>`:''} ${i.sku||''}</p></td><td></td><td></td><td>${S.locations.map(()=>'').join('')}<span></span></td><td class="num"></td><td></td><td></td><td></td><td class="num"></td><td></td></tr>
-${ S.variants.filter(v => v.item_id === i.id).filter(v => !lowOnly || totalOf(v.id) < (v.min_stock || 0)).map(v => {
-      const tot = totalOf(v.id);
-      const low = v.min_stock || 0;
-      return `<tr><td class="var-label" style="font-weight:500">${v.label}</td><td>${i.category||''}</td><td><code>${v.sku||''}</code></td>
-        ${S.locations.map(l => `<td class="num qty ${tot<low?'low':''}" onclick="${mem?`qtys()`:''}"><button class="qty-btn${tot<low?' low':''}" data-var="${v.id}" data-loc="${l.id}">${qtyOf(v.id, l.id)}</button></td>`).join('')}
-        <td class="num total ${tot<low?'low':''}">${qty(tot)}</td>
-        <td class="num" style="color:var(--muted)">${qty(low)}</td>
-        <td>${czk(i.purchase_price)}</td><td>${czk(i.sale_price)}</td>
-        <td class="num">${i.purchase_price ? czk(i.purchase_price*tot) : ''}</td>
-        <td>${S.suppliers.find(s=>s.id===i.supplier_id)?.name || ''}</td></tr>`;
-    }).join('')}`).join('');
-  $('#tbodyStock').innerHTML = html || '<tr><td class="empty" style="text-align:center;padding:24px">Zadne polozky</td></tr>';
-};
-
-$('#btnNewItem').onclick = () => {
-  S.editItem = null;
-  $('#itName').value = '';
-  $('#itDesc').value = '';
-  $('#itCat').value = '';
-  $('#itBuy').value = '';
-  $('#itSell').value = '';
-  $('#itSup').value = '';
-  $('#itPhotoPrev').innerHTML = '';
+});
+$('#btnNewItem').onclick = () => openItem(null);
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-edit-item]'); if(b) openItem(b.dataset.editItem);
+});
+function openItem(id){
+  S.editItem = id ? itemById(id) : null;
+  S.photoFile = null;
+  const i = S.editItem;
+  $('#itTitle').textContent = i ? 'Úprava položky' : 'Nová položka';
+  $('#itName').value = i?.name || ''; $('#itCat').value = i?.category || '';
+  $('#itDesc').value = i?.description || '';
+  $('#itBuy').value = i?.purchase_price ?? ''; $('#itSell').value = i?.sale_price ?? '';
+  fillSupplierSelect(); $('#itSup').value = i?.supplier_id || '';
   $('#itPhoto').value = '';
-  $('#itVars').innerHTML = '';
-  $('#itTitle').textContent = 'Nova polozka';
-  $('#itDel').classList.add('hide');
-  showModal('mItem');
-  setTimeout(() => $('#itName').focus(), 100);
+  const url = i && photoUrl(i.photo_path);
+  $('#itPhotoPrev').innerHTML = url ? `<img src="${esc(url)}" style="max-height:96px;border-radius:8px;border:1px solid var(--line)">` : '';
+  const vars = i ? S.variants.filter(v => v.item_id === i.id) : [];
+  $('#itVars').innerHTML = (vars.length ? vars : [{label:'—', min_stock:0}]).map(varRowHtml).join('');
+  $('#itDel').classList.toggle('hide', !i);
+  showErr('#itErr',''); openM('#mItem'); setTimeout(()=>$('#itName').focus(),80);
+}
+$('#itPhoto').onchange = e => {
+  const f = e.target.files[0]; S.photoFile = f || null;
+  if(f) $('#itPhotoPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" style="max-height:96px;border-radius:8px;border:1px solid var(--line)">`;
+};
+function shrinkImage(file, max = 1200, quality = .82){
+  return new Promise((res, rej) => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const r = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? res(b) : rej(new Error('Obrázek se nepodařilo zpracovat')), 'image/jpeg', quality);
+    };
+    img.onerror = () => rej(new Error('Soubor není platný obrázek'));
+    img.src = url;
+  });
+}
+$('#itSave').onclick = async () => {
+  const name = $('#itName').value.trim();
+  if(!name){ showErr('#itErr','Vyplňte název položky.'); return; }
+  const rows = Array.from($('#itVars').children).map((r, idx) => ({
+    id: r.dataset.vid || null,
+    label: (r.querySelector('.v-label').value.trim() || '—'),
+    sku: r.querySelector('.v-sku').value.trim() || null,
+    min_stock: parseInt(r.querySelector('.v-min').value, 10) || 0,
+    sort_order: idx
+  }));
+  const labels = rows.map(r => r.label.toLocaleLowerCase('cs'));   // „M“ a „m“ bereme jako totéž
+  if(new Set(labels).size !== labels.length){ showErr('#itErr','Varianty mají shodné označení — musí být unikátní.'); return; }
+
+  const payload = {
+    name, category: $('#itCat').value.trim() || null,
+    description: $('#itDesc').value.trim() || null,
+    purchase_price: $('#itBuy').value === '' ? null : Number($('#itBuy').value),
+    sale_price: $('#itSell').value === '' ? null : Number($('#itSell').value),
+    supplier_id: $('#itSup').value || null
+  };
+  $('#itSave').disabled = true;
+  try{
+    let itemId = S.editItem?.id;
+    if(itemId){
+      const {error} = await sb.from('items').update(payload).eq('id', itemId); if(error) throw error;
+    }else{
+      const {data, error} = await sb.from('items').insert(payload).select('id').single();
+      if(error) throw error; itemId = data.id;
+    }
+    // fotografie
+    if(S.photoFile){
+      const blob = await shrinkImage(S.photoFile);
+      const path = `items/${itemId}-${Date.now()}.jpg`;
+      const {error: upErr} = await sb.storage.from('merch-photos')
+        .upload(path, blob, {contentType:'image/jpeg', upsert:true});
+      if(upErr) throw upErr;
+      const {error: pErr} = await sb.from('items').update({photo_path: path}).eq('id', itemId);
+      if(pErr) throw pErr;
+    }
+    // varianty
+    const existing = S.editItem ? S.variants.filter(v => v.item_id === itemId) : [];
+    const keep = rows.filter(r => r.id).map(r => r.id);
+    const toDelete = existing.filter(v => !keep.includes(v.id));
+    for(const v of toDelete){
+      if(totalOf(v.id) !== 0 || S.movements.some(m => m.variant_id === v.id)){
+        throw new Error(`Variantu „${v.label}“ nelze smazat — má zapsané pohyby. Vynulujte ji inventurou nebo ji ponechte.`);
+      }
+      const {error} = await sb.from('variants').delete().eq('id', v.id); if(error) throw error;
+    }
+    for(const r of rows){
+      const body = {item_id:itemId, label:r.label, sku:r.sku, min_stock:r.min_stock, sort_order:r.sort_order};
+      const {error} = r.id ? await sb.from('variants').update(body).eq('id', r.id)
+                           : await sb.from('variants').insert(body);
+      if(error) throw error;
+    }
+    closeM('#mItem'); toast('Položka uložena'); await loadAll();
+  }catch(e){ showErr('#itErr', e.message || String(e)); }
+  finally{ $('#itSave').disabled = false; }
+};
+$('#itDel').onclick = async () => {
+  const i = S.editItem; if(!i) return;
+  const vars = S.variants.filter(v => v.item_id === i.id);
+  const pieces = vars.reduce((a,v) => a + totalOf(v.id), 0);
+  if(!confirm(`Opravdu smazat položku „${i.name}“?\n\nSmaže se i ${vars.length} variant a celá jejich historie pohybů`
+    + (pieces ? ` (evidováno ${pieces} ks na skladě).` : '.') + '\nTuto akci nelze vrátit zpět.')) return;
+  const {error} = await sb.from('items').delete().eq('id', i.id);
+  if(error){ showErr('#itErr', error.message); return; }
+  closeM('#mItem'); toast('Položka smazána'); await loadAll();
 };
 
-$$('[data-tab]').forEach(t => t.addEventListener('click', () => {
-  setTab(t.dataset.tab);
-  if(t.dataset.tab === 'stock') renderTable();
-  if(t.dataset.tab === 'moves') renderMoves();
-  if(t.dataset.tab === 'suppliers') renderSuppliers();
-  if(t.dataset.tab === 'places') renderLocations();
-  if(t.dataset.tab === 'users') renderUsers();
-}));
-
-let accData = {};
-setInterval(() => {
-  if(accData && Object.keys(accData).length) {
-    $('#accWho').textContent = `Prihlaseni: ${accData.email}`;
-    $('#accName').value = accData.full_name || '';
-  }
-}, 100);
-
-const renderTable_clicked = () => {
-  S.variants.find(v => (v.id ? {
-    const tot = totalOf(v.id);
-    rows.push([i.name, i.category||'', v.label, v.sku||'',
-        ...S.locations.map(l => qtyOf(v.id, l.id)),
-        tot, v.min_stock||0, i.purchase_price??'', i.sale_price??'',
-        i.purchase_price ? (i.purchase_price*tot).toFixed(2) : '',
-        S.suppliers.find(s=>s.id===i.supplier_id)?.name || '']);
-  }: null));
+/* ---------------------- dodavatelé: formulář ------------------------ */
+$('#btnNewSup').onclick = () => openSup(null);
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-edit-sup]'); if(b) openSup(b.dataset.editSup);
+});
+const SUP_FIELDS = {suName:'name', suCat:'category', suPerson:'contact_person', suPhone:'phone',
+  suMail:'email', suWeb:'website', suAddr:'address', suIco:'ico', suDic:'dic',
+  suTerms:'payment_terms', suNote:'note'};
+function openSup(id){
+  S.editSup = id ? S.suppliers.find(s => s.id === id) : null;
+  $('#suTitle').textContent = S.editSup ? 'Úprava dodavatele' : 'Nový dodavatel';
+  Object.entries(SUP_FIELDS).forEach(([el, f]) => $('#'+el).value = S.editSup?.[f] || '');
+  $('#suDel').classList.toggle('hide', !S.editSup);
+  showErr('#suErr',''); openM('#mSup'); setTimeout(()=>$('#suName').focus(),80);
+}
+$('#suSave').onclick = async () => {
+  const payload = {};
+  Object.entries(SUP_FIELDS).forEach(([el, f]) => payload[f] = $('#'+el).value.trim() || null);
+  if(!payload.name){ showErr('#suErr','Vyplňte název firmy.'); return; }
+  $('#suSave').disabled = true;
+  const {error} = S.editSup ? await sb.from('suppliers').update(payload).eq('id', S.editSup.id)
+                            : await sb.from('suppliers').insert(payload);
+  $('#suSave').disabled = false;
+  if(error){ showErr('#suErr', error.message); return; }
+  closeM('#mSup'); toast('Dodavatel uložen'); await loadSuppliers();
+};
+$('#suDel').onclick = async () => {
+  if(!confirm(`Smazat dodavatele „${S.editSup.name}“? U navázaných položek se dodavatel jen odpojí.`)) return;
+  const {error} = await sb.from('suppliers').delete().eq('id', S.editSup.id);
+  if(error){ showErr('#suErr', error.message); return; }
+  closeM('#mSup'); toast('Dodavatel smazán'); await loadAll();
 };
 
-$('#accName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#accSave').click(); });
-$('#suName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#suSave').click(); });
-$('#itName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#itSave').click(); });
-$('#loName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#loSave').click(); });
-$('#usName').addEventListener('keypress', (e) => { if(e.key === 'Enter') $('#usSave').click(); });
+/* ---------------------- místa: formulář ----------------------------- */
+$('#btnNewLoc').onclick = () => openLoc(null);
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-edit-loc]'); if(b) openLoc(b.dataset.editLoc);
+});
+function openLoc(id){
+  S.editLoc = id ? locById(id) : null;
+  $('#loTitle').textContent = S.editLoc ? 'Úprava místa' : 'Nové místo';
+  $('#loName').value = S.editLoc?.name || ''; $('#loNote').value = S.editLoc?.note || '';
+  $('#loDel').classList.toggle('hide', !S.editLoc);
+  showErr('#loErr',''); openM('#mLoc'); setTimeout(()=>$('#loName').focus(),80);
+}
+$('#loSave').onclick = async () => {
+  const name = $('#loName').value.trim();
+  if(!name){ showErr('#loErr','Vyplňte název místa.'); return; }
+  const payload = {name, note: $('#loNote').value.trim() || null};
+  if(!S.editLoc) payload.sort_order = S.locations.length + 1;
+  const {error} = S.editLoc ? await sb.from('locations').update(payload).eq('id', S.editLoc.id)
+                            : await sb.from('locations').insert(payload);
+  if(error){ showErr('#loErr', error.message); return; }
+  closeM('#mLoc'); toast('Místo uloženo'); await loadAll();
+};
+$('#loDel').onclick = async () => {
+  const used = S.stock.some(s => s.location_id === S.editLoc.id && s.qty !== 0);
+  if(used){ showErr('#loErr','Na místě je evidováno zboží — nejdřív ho přesuňte jinam.'); return; }
+  if(!confirm(`Smazat místo „${S.editLoc.name}“?`)) return;
+  const {error} = await sb.from('locations').delete().eq('id', S.editLoc.id);
+  if(error){ showErr('#loErr','Místo nelze smazat, váže se k němu historie pohybů.'); return; }
+  closeM('#mLoc'); toast('Místo smazáno'); await loadAll();
+};
 
+/* ---------------------- export -------------------------------------- */
+function downloadCsv(filename, rows){
+  const csv = '\uFEFF' + rows.map(r => r.map(c => {
+    const s = String(c ?? '');
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  }).join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = filename; a.click(); URL.revokeObjectURL(a.href);
+}
 $('#btnCsv').onclick = () => {
-  const rows = [['Polozka','Kategorie','Varianta','SKU',...S.locations.map(l => l.name),'Celkem','Min','Nak','Prod','Uhr','Dodavatel']];
-  S.items.forEach(i => {
+  const head = ['Položka','Kategorie','Varianta','Kód', ...S.locations.map(l=>l.name),
+    'Celkem','Min. zásoba','Nákupní cena','Prodejní cena','Hodnota zásoby','Dodavatel'];
+  const rows = [head];
+  S.items.filter(i=>!i.archived).forEach(i => {
     S.variants.filter(v => v.item_id === i.id).forEach(v => {
       const tot = totalOf(v.id);
       rows.push([i.name, i.category||'', v.label, v.sku||'',
@@ -1317,7 +1472,7 @@ $('#btnCsv').onclick = () => {
   downloadCsv(`sklad-merch-${new Date().toISOString().slice(0,10)}.csv`, rows);
 };
 $('#btnCsvMoves').onclick = () => {
-  const rows = [['Datum','Polozka','Varianta','Typ','Mnozstvi','Odkud','Kam','Poznamka','Zadal']];
+  const rows = [['Datum','Položka','Varianta','Typ','Množství','Odkud','Kam','Poznámka','Zadal']];
   S.movements.forEach(m => {
     const v = varById(m.variant_id), i = v && itemById(v.item_id);
     rows.push([dt(m.created_at), i?.name||'', v?.label||'', TYPE_LBL[m.type], m.qty,
@@ -1329,9 +1484,12 @@ $('#btnCsvMoves').onclick = () => {
 };
 $('#btnPrint').onclick = () => window.print();
 
-/* ------ renderTable sloupečky -------- */
+/* ---------------------- start --------------------------------------- */
+boot();
+// automatické obnovení dat — přeskočí se, pokud má uživatel otevřený některý dialog,
+// aby se mu pod rukama nezměnil výchozí stav (např. při zadávání inventury)
 setInterval(() => {
-  if(!sb || document.querySelector('.overlay.open')) return;
+  if(!sb || document.visibilityState !== 'visible') return;
   if(document.querySelector('.overlay.open')) return;
   loadAll();
 }, 60000);
