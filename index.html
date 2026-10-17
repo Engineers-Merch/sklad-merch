@@ -664,7 +664,13 @@ function boot(){
     refreshAuthUI();
     loadAll();
   });
-  sb.auth.onAuthStateChange(async (ev, sess) => {
+  // Pozor na zámek relace: knihovna volá tento callback v době, kdy drží
+  // výhradní zámek nad uloženou relací. Jakékoli volání sb.* uvnitř by na
+  // uvolnění toho zámku čekalo — jenže ten se uvolní až po návratu
+  // z callbacku, takže by se aplikace zacyklila a nenačetla vůbec nic.
+  // Proto je callback záměrně synchronní a vlastní práci odkládá na další
+  // průchod smyčky událostí, kdy je zámek už volný.
+  sb.auth.onAuthStateChange((ev, sess) => {
     if(ev === 'PASSWORD_RECOVERY'){
       S.user = sess?.user || null;
       showErr('#rsErr',''); $('#rsPass').value = ''; $('#rsPass2').value = '';
@@ -673,7 +679,9 @@ function boot(){
     }
     const changed = (sess?.user?.id || null) !== (S.user?.id || null);
     S.user = sess?.user || null;
-    if(changed){ await loadProfile(); refreshAuthUI(); loadAll(); }
+    if(changed) setTimeout(async () => {
+      await loadProfile(); refreshAuthUI(); loadAll();
+    }, 0);
   });
 }
 $('#cfgSave').onclick = () => {
@@ -743,18 +751,26 @@ function refreshAuthUI(){
 }
 
 /* ---------------------- načtení dat --------------------------------- */
+// Hlídač: dotaz, který se nevrátí, by jinak nechal stránku navždy prázdnou
+// bez jediné zprávy. Raději po 20 vteřinách přiznáme barvu.
+const withTimeout = (p, popis) => Promise.race([
+  p,
+  new Promise((_, rej) => setTimeout(
+    () => rej(new Error('vypršel časový limit (' + popis + ')')), 20000))
+]);
+
 async function loadAll(){
   try{
     const mem = isMember();
     const itemsSrc = mem ? 'items' : 'items_public';
-    const [loc, it, va, st, mv] = await Promise.all([
+    const [loc, it, va, st, mv] = await withTimeout(Promise.all([
       sb.from('locations').select('*').order('sort_order').order('name'),
       sb.from(itemsSrc).select('*').order('name'),
       sb.from('variants').select('*').order('sort_order').order('label'),
       sb.from('stock').select('*'),
       mem ? sb.from('movements').select('*').order('created_at',{ascending:false}).limit(1000)
           : Promise.resolve({data:[], error:null})
-    ]);
+    ]), 'načítání skladu');
     const bad = [loc,it,va,st,mv].find(r => r.error);
     if(bad) throw bad.error;
     S.locations = loc.data; S.items = it.data; S.variants = va.data;
