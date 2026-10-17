@@ -100,11 +100,14 @@ th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
 /* řádek položky (hlavička skupiny) */
 tr.item-head td{background:#f7f9fc;border-top:1px solid var(--line);padding:10px 12px}
 .item-title{display:flex;align-items:center;gap:11px}
-.thumb{width:40px;height:40px;border-radius:7px;object-fit:cover;background:#e8edf4;flex:none;border:1px solid var(--line)}
-.thumb-ph{width:40px;height:40px;border-radius:7px;background:#e8edf4;display:grid;place-items:center;color:#9fb0c6;font-size:16px;flex:none}
+.thumb{width:58px;height:58px;border-radius:8px;object-fit:contain;background:#fff;flex:none;border:1px solid var(--line);cursor:zoom-in;transition:transform .12s}
+.thumb:hover{transform:scale(1.06)}
+.thumb-ph{width:58px;height:58px;border-radius:8px;background:#e8edf4;display:grid;place-items:center;color:#9fb0c6;font-size:20px;flex:none}
+.lightbox{position:fixed;inset:0;background:rgba(10,16,28,.82);display:grid;place-items:center;z-index:9999;padding:24px}
+.lightbox img{max-width:min(92vw,760px);max-height:86vh;border-radius:12px;background:#fff;box-shadow:0 18px 60px rgba(0,0,0,.45)}
 .item-title b{font-size:14.5px}
 .item-meta{font-size:12px;color:var(--muted)}
-.var-label{font-weight:600;padding-left:52px}
+.var-label{font-weight:600;padding-left:70px}
 
 /* buňky množství */
 .qty{display:inline-block;min-width:30px;text-align:right;font-variant-numeric:tabular-nums}
@@ -900,8 +903,9 @@ function renderStock(){
     const span = 1 + locs.length + 2 + (mem ? 2 : 0);
     rows.push(`<tr class="item-head"><td colspan="${span}">
       <div class="item-title">
-        ${img ? `<img class="thumb" src="${esc(img)}" alt="" loading="lazy">`
-              : '<div class="thumb-ph">📦</div>'}
+        ${img ? `<img class="thumb" src="${esc(img)}" alt="${esc(item.name)}" title="Klikněte pro zvětšení"
+                     loading="lazy" data-zoom="${esc(img)}">`
+              : '<div class="thumb-ph" title="Bez fotky – nahrajete ji přes tlačítko Upravit">📦</div>'}
         <div style="flex:1">
           <b>${esc(item.name)}</b>
           ${meta ? `<div class="item-meta">${esc(meta)}</div>` : ''}
@@ -1290,6 +1294,19 @@ document.addEventListener('click', e => {
 $('#btnNewItem').onclick = () => openItem(null);
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-edit-item]'); if(b) openItem(b.dataset.editItem);
+});
+
+/* ---------------------- zvětšení fotky ------------------------------ */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-zoom]'); if(!t) return;
+  const box = document.createElement('div');
+  box.className = 'lightbox';
+  box.innerHTML = `<img src="${esc(t.dataset.zoom)}" alt="">`;
+  box.onclick = () => box.remove();
+  document.body.appendChild(box);
+});
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') document.querySelectorAll('.lightbox').forEach(l => l.remove());
 });
 function openItem(id){
   S.editItem = id ? itemById(id) : null;
