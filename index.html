@@ -233,7 +233,8 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
 <nav>
   <div class="nav-in">
     <button class="tab active" data-tab="stock">Skladové zásoby</button>
-    <button class="tab" data-tab="moves">Historie pohybů</button>
+    <button class="tab" data-tab="sales">Prodeje</button>
+    <button class="tab" data-tab="moves">Pohyby</button>
     <button class="tab" data-tab="suppliers">Seznam dodavatelů</button>
     <button class="tab" data-tab="places">Místa</button>
     <button class="tab hide" data-tab="users">Uživatelé</button>
@@ -274,10 +275,69 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
     <p class="small muted" style="margin-top:10px" id="stockHint"></p>
   </section>
 
-  <!-- ------------------------ HISTORIE POHYBŮ ---------------------- -->
+  <!-- ---------------------------- PRODEJE -------------------------- -->
+  <section class="view" id="view-sales">
+    <div id="slLocked" class="alert alert-info hide">
+      Tržby jsou obchodní údaj a každý prodej nese jméno toho, kdo ho zapsal —
+      záložka je proto přístupná až po přihlášení.
+    </div>
+    <div id="slPanel" class="hide">
+      <div class="stats" id="salesStats"></div>
+      <div id="slCostWarn" class="alert alert-warn hide"></div>
+
+      <div class="toolbar">
+        <select class="sel" id="slPeriod">
+          <option value="all">Celé období</option>
+          <option value="30">Posledních 30 dní</option>
+          <option value="90">Posledních 90 dní</option>
+          <option value="season">Sezona 2026/27 (od 1. 7. 2026)</option>
+        </select>
+        <select class="sel" id="slLoc"><option value="all">Všechna místa</option></select>
+        <span class="spacer"></span>
+        <button id="btnCsvSales" class="btn-sm">Export CSV</button>
+        <button id="btnNewSale" class="btn-accent">+ Zapsat prodej</button>
+      </div>
+
+      <div class="card tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Místo</th><th class="num">Prodáno ks</th><th class="num">Tržby</th>
+            <th class="num">Náklady prodaného zboží</th><th class="num">Hrubá marže</th>
+            <th class="num">Marže %</th><th class="num">Pořízeno na sklad</th>
+            <th class="num">Hodnota zásob</th>
+          </tr></thead>
+          <tbody id="tbodySalesSum"></tbody>
+        </table>
+      </div>
+      <p class="small muted" style="margin:10px 0 22px">
+        <b>Náklady prodaného zboží</b> jsou pořizovací ceny právě těch kusů, které se prodaly —
+        proti tržbě z nich vychází skutečná hrubá marže. <b>Pořízeno na sklad</b> je naproti tomu
+        souhrn pořizovacích cen všeho, co na dané místo ve zvoleném období přišlo, tedy peníze
+        do zásob vložené; co se z nich zatím neprodalo, drží <b>hodnota zásob</b> — ta je na rozdíl
+        od ostatních sloupců stavem k dnešku, obdobím se tedy nefiltruje. Záporný rozdíl mezi
+        pořízením a tržbou sám o sobě neznamená ztrátu, jen peníze zatím vázané ve zboží.
+      </p>
+
+      <div class="toolbar">
+        <input class="search" id="qsl" placeholder="Hledat v prodejích…">
+      </div>
+      <div class="card tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Datum</th><th>Položka</th><th>Varianta</th><th>Místo</th>
+            <th class="num">Ks</th><th class="num">Cena/ks</th><th class="num">Tržba</th>
+            <th class="num">Marže</th><th>Platba</th><th>Poznámka</th><th>Zapsal</th><th></th>
+          </tr></thead>
+          <tbody id="tbodySales"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ----------------------------- POHYBY -------------------------- -->
   <section class="view" id="view-moves">
     <div id="mvLocked" class="alert alert-info hide">
-      Historie pohybů je vedena jmenovitě, a proto je přístupná až po přihlášení.
+      Pohyby jsou vedeny jmenovitě, a proto jsou přístupné až po přihlášení.
     </div>
     <div id="mvPanel">
     <div class="toolbar">
@@ -291,6 +351,7 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
       </select>
       <span class="spacer"></span>
       <button id="btnCsvMoves" class="btn-sm">Export CSV</button>
+      <button id="btnNewMove" class="btn-accent">+ Přidat pohyb</button>
     </div>
     <div class="card tbl-wrap">
       <table>
@@ -357,7 +418,7 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
       </div>
       <p class="small muted" style="margin-top:10px">
         Počet zápisů a datum posledního se vztahují k poslednímu tisíci pohybů, které si
-        aplikace načítá; úplná historie je na záložce Historie pohybů.
+        aplikace načítá; úplná historie je na záložce Pohyby.
       </p>
     </div>
   </section>
@@ -508,6 +569,76 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
     <div class="modal-f">
       <button data-close>Zrušit</button>
       <button class="btn-primary" id="mvGo">Přesunout</button>
+    </div>
+  </div>
+</div>
+
+<!-- zápis prodeje -->
+<div class="overlay" id="mSale">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-h"><h3>Zápis prodeje</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <p class="small muted" style="margin-top:0">
+        Prodej se zapíše spolu s výdejem ze skladu v jediném kroku — tržba tedy
+        nikdy nevznikne bez úbytku zásoby. Ceny se zapsáním zamrazí, pozdější
+        změna ceníku už dosažené tržby nepřepíše.
+      </p>
+      <div class="row2">
+        <label class="fld"><span>Místo prodeje *</span><select id="saLoc"></select></label>
+        <label class="fld"><span>Datum a čas prodeje</span><input id="saWhen" type="datetime-local"></label>
+      </div>
+      <label class="fld"><span>Položka a velikost *</span><select id="saVar"></select></label>
+      <p id="saAvail" class="small muted" style="margin:-8px 0 12px"></p>
+      <div class="row3">
+        <label class="fld"><span>Počet kusů *</span><input id="saQty" type="number" min="1" step="1" value="1"></label>
+        <label class="fld"><span>Cena za kus (Kč) *</span><input id="saPrice" type="number" min="0" step="1"></label>
+        <label class="fld"><span>Platba</span>
+          <select id="saPay">
+            <option value="cash">Hotově</option>
+            <option value="card">Kartou</option>
+            <option value="transfer">Převodem</option>
+            <option value="other">Jinak</option>
+          </select></label>
+      </div>
+      <label class="fld"><span>Poznámka</span>
+        <input id="saNote" placeholder="např. zápas s Pardubicemi, stánek u vstupu"></label>
+      <div id="saErr" class="alert alert-err hide small"></div>
+    </div>
+    <div class="modal-f">
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="saGo">Zapsat prodej</button>
+    </div>
+  </div>
+</div>
+
+<!-- obecný pohyb (přesun, naskladnění, výdej) -->
+<div class="overlay" id="mAdd">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-h"><h3>Přidat pohyb</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-b">
+      <label class="fld"><span>Druh pohybu *</span>
+        <select id="adType">
+          <option value="move">Přesun mezi místy</option>
+          <option value="in">Naskladnění (příjem zboží)</option>
+          <option value="out">Výdej ze skladu</option>
+        </select></label>
+      <label class="fld"><span>Položka a velikost *</span><select id="adVar"></select></label>
+      <p id="adAvail" class="small muted" style="margin:-8px 0 12px"></p>
+      <div class="row2">
+        <label class="fld" id="adFromW"><span>Odkud</span><select id="adFrom"></select></label>
+        <label class="fld" id="adToW"><span>Kam</span><select id="adTo"></select></label>
+      </div>
+      <div class="row2">
+        <label class="fld"><span>Počet kusů *</span><input id="adQty" type="number" min="1" step="1" value="1"></label>
+        <label class="fld"><span>Datum a čas</span><input id="adWhen" type="datetime-local"></label>
+      </div>
+      <label class="fld"><span>Poznámka</span>
+        <input id="adNote" placeholder="např. doplnění stánku na Strahově, faktura 2026/114"></label>
+      <div id="adErr" class="alert alert-err hide small"></div>
+    </div>
+    <div class="modal-f">
+      <button data-close>Zrušit</button>
+      <button class="btn-primary" id="adGo">Zapsat pohyb</button>
     </div>
   </div>
 </div>
@@ -705,7 +836,7 @@ $('#cfgSave').onclick = () => {
    ------------------------------------------------------------------- */
 const S = {
   user:null, profile:null, profiles:[],
-  locations:[], items:[], variants:[], stock:[], suppliers:[], movements:[],
+  locations:[], items:[], variants:[], stock:[], suppliers:[], movements:[], sales:[],
   tab:'stock', editItem:null, editSup:null, editLoc:null, editUser:null,
   qtyCtx:null, moveCtx:null, photoFile:null
 };
@@ -742,13 +873,15 @@ function refreshAuthUI(){
   $('#supPanel').classList.toggle('hide', !mem);
   $('#mvLocked').classList.toggle('hide', mem);
   $('#mvPanel').classList.toggle('hide', !mem);
+  $('#slLocked').classList.toggle('hide', mem);
+  $('#slPanel').classList.toggle('hide', !mem);
   $('#usrLocked').classList.toggle('hide', adm);
   $('#usrPanel').classList.toggle('hide', !adm);
   $$('.tab[data-tab="users"]').forEach(t => t.classList.toggle('hide', !adm));
   if(S.tab === 'users' && !adm) showTab('stock');
 
   $('#stockHint').textContent = mem
-    ? 'Kliknutím na číslo u daného místa zadáte naskladnění, výdej nebo inventuru. Každý zápis nese vaše jméno a zůstává v historii pohybů.'
+    ? 'Kliknutím na číslo u daného místa zadáte naskladnění, výdej nebo inventuru. Každý zápis nese vaše jméno a zůstává na záložce Pohyby.'
     : 'Prohlížíte sdílený přehled skladu. Pro úpravy se přihlaste vlastním účtem.';
   render();
 }
@@ -766,18 +899,20 @@ async function loadAll(){
   try{
     const mem = isMember();
     const itemsSrc = mem ? 'items' : 'items_public';
-    const [loc, it, va, st, mv] = await withTimeout(Promise.all([
+    const [loc, it, va, st, mv, sl] = await withTimeout(Promise.all([
       sb.from('locations').select('*').order('sort_order').order('name'),
       sb.from(itemsSrc).select('*').order('name'),
       sb.from('variants').select('*').order('sort_order').order('label'),
       sb.from('stock').select('*'),
       mem ? sb.from('movements').select('*').order('created_at',{ascending:false}).limit(1000)
+          : Promise.resolve({data:[], error:null}),
+      mem ? sb.from('sales').select('*').order('sold_at',{ascending:false}).limit(2000)
           : Promise.resolve({data:[], error:null})
     ]), 'načítání skladu');
-    const bad = [loc,it,va,st,mv].find(r => r.error);
+    const bad = [loc,it,va,st,mv,sl].find(r => r.error);
     if(bad) throw bad.error;
     S.locations = loc.data; S.items = it.data; S.variants = va.data;
-    S.stock = st.data;      S.movements = mv.data;
+    S.stock = st.data;      S.movements = mv.data;  S.sales = sl.data || [];
     await loadProfiles();
     showErr('#globalErr', '');
     $('#lastSync').textContent = 'Aktualizováno ' + new Date().toLocaleTimeString('cs-CZ');
@@ -841,6 +976,26 @@ function fillSelects(){
 
   const opts = S.locations.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   $('#mvFrom').innerHTML = opts; $('#mvTo').innerHTML = opts;
+  $('#saLoc').innerHTML = opts;
+  $('#adFrom').innerHTML = opts; $('#adTo').innerHTML = opts;
+
+  const curS = $('#slLoc').value;
+  $('#slLoc').innerHTML = '<option value="all">Všechna místa</option>' + opts;
+  $('#slLoc').value = curS || 'all';
+
+  // výběr zboží je seskupený po položkách, aby se v něm dalo hledat podle názvu
+  const vopts = S.items.filter(i => !i.archived).map(i => {
+    const vars = S.variants.filter(v => v.item_id === i.id);
+    if(!vars.length) return '';
+    return `<optgroup label="${esc(i.name)}">` + vars.map(v =>
+      `<option value="${v.id}">${esc(i.name)}${v.label !== '—' ? ' · ' + esc(v.label) : ''}</option>`
+    ).join('') + '</optgroup>';
+  }).join('');
+  ['#saVar','#adVar'].forEach(sel => {
+    const cur = $(sel).value;
+    $(sel).innerHTML = vopts;
+    if(cur) $(sel).value = cur;
+  });
   fillSupplierSelect();
 }
 function fillSupplierSelect(){
@@ -855,7 +1010,7 @@ function visibleLocations(){
 }
 function render(){
   if(!S.locations.length && !S.items.length){ renderStock(); return; }
-  renderStock(); renderMoves(); renderLocations(); renderSuppliers(); renderUsers();
+  renderStock(); renderMoves(); renderSales(); renderLocations(); renderSuppliers(); renderUsers();
 }
 
 function renderStock(){
@@ -994,6 +1149,145 @@ function renderMoves(){
     '<tr><td colspan="8"><div class="empty"><div class="ico">🕑</div><div>Zatím žádné pohyby.</div></div></td></tr>';
 }
 
+/* ---------------------- prodeje a tržby ------------------------------
+   Dvě čísla, která se snadno zamění a mají jiný účetní význam:
+
+     náklady prodaného zboží  pořizovací ceny právě těch kusů, které se
+                              prodaly — jediný správný protipól tržby,
+                              z rozdílu vychází hrubá marže
+     pořízeno na sklad        pořizovací ceny všeho, co na místo přišlo,
+                              tedy peníze vložené do zásob; co se zatím
+                              neprodalo, leží na místě jako hodnota zásob
+
+   Nákupní cena se u prodeje zamrazí. Chybí-li (položka ji ještě nemá
+   vyplněnou), bereme náhradně dnešní cenu z ceníku, aby se marže doplnila
+   zpětně hned, jak Aleš ceny doplní. Dokud chybí, je marže nadhodnocená
+   a aplikace to musí říct nahlas — proto počítadlo neúplných prodejů.
+   --------------------------------------------------------------------- */
+const PAY_LBL = {cash:'hotově', card:'kartou', transfer:'převodem', other:'jinak'};
+function costOfVariant(vid){
+  const v = varById(vid), i = v && itemById(v.item_id);
+  return i?.purchase_price ?? null;
+}
+function saleCost(s){
+  return s.unit_cost != null ? Number(s.unit_cost) : costOfVariant(s.variant_id);
+}
+function periodFrom(){
+  const p = $('#slPeriod').value;
+  if(p === 'all') return null;
+  if(p === 'season') return new Date('2026-07-01T00:00:00');
+  const d = new Date(); d.setDate(d.getDate() - parseInt(p, 10)); return d;
+}
+
+function renderSales(){
+  if(!isMember()){ $('#tbodySales').innerHTML = ''; return; }
+  const from = periodFrom(), fLoc = $('#slLoc').value, q = norm($('#qsl').value);
+  const inPeriod = iso => !from || new Date(iso) >= from;
+
+  const sales = S.sales.filter(s => inPeriod(s.sold_at))
+                       .filter(s => fLoc === 'all' || s.location_id === fLoc);
+
+  // ---- souhrn po místech -------------------------------------------
+  const agg = {};
+  const box = id => agg[id] || (agg[id] = {pieces:0, revenue:0, cogs:0, bought:0, stockVal:0, unknown:0});
+  sales.forEach(s => {
+    const a = box(s.location_id), c = saleCost(s);
+    a.pieces  += s.qty;
+    a.revenue += s.qty * Number(s.unit_price);
+    if(c == null) a.unknown++; else a.cogs += s.qty * c;
+  });
+  // peníze vložené do zásob = naskladnění × pořizovací cena
+  S.movements.filter(m => m.type === 'in' && m.to_location_id && inPeriod(m.created_at))
+    .forEach(m => {
+      const c = costOfVariant(m.variant_id);
+      if(c != null) box(m.to_location_id).bought += m.qty * c;
+    });
+  // hodnota zásob je okamžikový údaj, obdobím se nefiltruje
+  S.stock.forEach(r => {
+    const c = costOfVariant(r.variant_id);
+    if(c != null && r.qty) box(r.location_id).stockVal += r.qty * c;
+  });
+
+  const locs = S.locations.filter(l => fLoc === 'all' || l.id === fLoc);
+  let tP=0, tR=0, tC=0, tB=0, tS=0, tU=0;
+  const rows = locs.map(l => {
+    const a = agg[l.id] || {pieces:0, revenue:0, cogs:0, bought:0, stockVal:0, unknown:0};
+    tP+=a.pieces; tR+=a.revenue; tC+=a.cogs; tB+=a.bought; tS+=a.stockVal; tU+=a.unknown;
+    const marg = a.revenue - a.cogs;
+    const pct  = a.revenue ? Math.round(marg / a.revenue * 100) : null;
+    return `<tr>
+      <td><b>${esc(l.name)}</b>${a.unknown ? ` <span class="pill pill-warn">${a.unknown}× bez nákupní ceny</span>` : ''}</td>
+      <td class="num">${a.pieces ? num(a.pieces) : '—'}</td>
+      <td class="num"><b>${a.revenue ? czk(a.revenue) : '—'}</b></td>
+      <td class="num">${a.cogs ? czk(a.cogs) : '—'}</td>
+      <td class="num" style="${marg<0?'color:var(--danger)':''}">${a.revenue ? czk(marg) : '—'}</td>
+      <td class="num">${pct == null ? '—' : pct + ' %'}</td>
+      <td class="num">${a.bought ? czk(a.bought) : '—'}</td>
+      <td class="num">${a.stockVal ? czk(a.stockVal) : '—'}</td>
+    </tr>`;
+  });
+  const tM = tR - tC, tPct = tR ? Math.round(tM / tR * 100) : null;
+  rows.push(`<tr style="border-top:2px solid var(--line);font-weight:600">
+      <td>Celkem</td><td class="num">${num(tP)}</td><td class="num">${czk(tR)}</td>
+      <td class="num">${czk(tC)}</td><td class="num">${czk(tM)}</td>
+      <td class="num">${tPct == null ? '—' : tPct + ' %'}</td>
+      <td class="num">${czk(tB)}</td><td class="num">${czk(tS)}</td></tr>`);
+  $('#tbodySalesSum').innerHTML = rows.join('');
+
+  $('#salesStats').innerHTML = `
+    <div class="stat"><div class="k">Tržby</div><div class="v">${czk(tR)}</div>
+      <div class="s">${num(tP)} ks · ${num(sales.length)} prodejů</div></div>
+    <div class="stat"><div class="k">Hrubá marže</div><div class="v">${czk(tM)}</div>
+      <div class="s">${tPct == null ? 'zatím bez prodeje' : tPct + ' % z tržeb'}</div></div>
+    <div class="stat"><div class="k">Pořízeno na sklad</div><div class="v">${czk(tB)}</div>
+      <div class="s">vloženo do zásob za období</div></div>
+    <div class="stat"><div class="k">Hodnota zásob</div><div class="v">${czk(tS)}</div>
+      <div class="s">dosud neprodané zboží</div></div>`;
+
+  const noPrice = S.items.filter(i => !i.archived && i.purchase_price == null).length;
+  const w = $('#slCostWarn');
+  if(noPrice){
+    w.classList.remove('hide');
+    w.innerHTML = `<b>Nákladová strana je zatím neúplná.</b> U ${noPrice} z ` +
+      `${S.items.filter(i=>!i.archived).length} druhů zboží chybí nákupní cena, ` +
+      `takže se jejich pořizovací náklady počítají jako nulové a marže vychází ` +
+      `nadhodnocená. Doplňte ceny u položek (tlačítko <b>Upravit</b> na záložce ` +
+      `Skladové zásoby) a čísla se dopočítají zpětně.`;
+  } else w.classList.add('hide');
+
+  // ---- jednotlivé prodeje ------------------------------------------
+  const adm = isAdmin();
+  const list = sales.filter(s => {
+    if(!q) return true;
+    const v = varById(s.variant_id), i = v && itemById(v.item_id);
+    return norm(i?.name).includes(q) || norm(v?.label).includes(q) || norm(s.note).includes(q)
+        || norm(locById(s.location_id)?.name).includes(q) || norm(authorOf(s)).includes(q);
+  }).map(s => {
+    const v = varById(s.variant_id), i = v && itemById(v.item_id), c = saleCost(s);
+    const rev = s.qty * Number(s.unit_price);
+    const mar = c == null ? null : rev - s.qty * c;
+    return `<tr>
+      <td class="small">${dt(s.sold_at)}</td>
+      <td>${esc(i?.name || '—')}</td>
+      <td>${esc(v?.label || '')}</td>
+      <td class="small">${esc(locById(s.location_id)?.name || '—')}</td>
+      <td class="num">${s.qty}</td>
+      <td class="num small">${czk(s.unit_price)}</td>
+      <td class="num"><b>${czk(rev)}</b></td>
+      <td class="num small ${mar == null ? 'muted' : ''}">${mar == null ? 'bez nákupní ceny' : czk(mar)}</td>
+      <td class="small muted">${PAY_LBL[s.payment] || s.payment}</td>
+      <td class="small muted">${esc(s.note || '')}</td>
+      <td class="small muted">${esc(authorOf(s))}</td>
+      <td class="num">${adm ? `<button class="btn-sm btn-danger" data-sale-del="${s.id}" title="Storno vrátí kusy zpět na sklad">Storno</button>` : ''}</td>
+    </tr>`;
+  });
+  $('#tbodySales').innerHTML = list.length ? list.join('') :
+    `<tr><td colspan="12"><div class="empty"><div class="ico">🧾</div>
+      <div>${S.sales.length ? 'Ve zvoleném období ani filtru není žádný prodej.' : 'Zatím žádný zapsaný prodej.'}</div>
+      <p class="small">Prodej zapíšete tlačítkem „+ Zapsat prodej“ — zboží se zároveň odepíše ze skladu.</p>
+    </div></td></tr>`;
+}
+
 /* ---------------------- místa --------------------------------------- */
 function renderLocations(){
   const mem = isMember(), adm = isAdmin();
@@ -1086,6 +1380,8 @@ $$('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 $('#fLow').onchange = renderStock;
 $('#qm').oninput = renderMoves; $('#fType').onchange = renderMoves;
 $('#qs').oninput = renderSuppliers;
+$('#qsl').oninput = renderSales;
+$('#slPeriod').onchange = renderSales; $('#slLoc').onchange = renderSales;
 $$('[data-close]').forEach(b => b.onclick = () => b.closest('.overlay').classList.remove('open'));
 $$('.overlay').forEach(o => o.onclick = e => { if(e.target === o) o.classList.remove('open'); });
 document.addEventListener('keydown', e => { if(e.key === 'Escape') $$('.overlay').forEach(o=>o.classList.remove('open')); });
@@ -1272,6 +1568,122 @@ $('#mvGo').onclick = async () => {
   $('#mvGo').disabled = false;
   if(error){ showErr('#mvErr', error.message); return; }
   closeM('#mMove'); toast('Zboží přesunuto'); await loadAll();
+};
+
+/* ---------------------- zápis prodeje --------------------------------
+   Tržbu i výdej ze skladu zapisuje jediná databázová funkce record_sale(),
+   takže obojí vznikne naráz, nebo nevznikne nic. Běží s právy přihlášeného
+   uživatele — pravidla přístupu tedy platí stejně jako u ručního zápisu.
+   --------------------------------------------------------------------- */
+function localIso(d = new Date()){
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function saleCtxRefresh(){
+  const vid = $('#saVar').value, lid = $('#saLoc').value;
+  const v = varById(vid), i = v && itemById(v.item_id);
+  const here = qtyOf(vid, lid);
+  $('#saAvail').innerHTML = !v ? '' :
+    `Na místě „${esc(locById(lid)?.name || '?')}“ je evidováno <b>${here} ks</b> · ` +
+    S.locations.filter(l => l.id !== lid).map(l => `${esc(l.name)}: ${qtyOf(vid, l.id)}`).join(' · ') +
+    (i?.purchase_price != null ? ` · nákupní cena ${czk(i.purchase_price)}` : ' · nákupní cena zatím nevyplněná');
+  if(i?.sale_price != null && !$('#saPrice').dataset.touched) $('#saPrice').value = i.sale_price;
+}
+$('#btnNewSale').onclick = () => {
+  if(!S.variants.length){ toast('Nejdřív založte zboží na skladě', true); return; }
+  showErr('#saErr','');
+  $('#saWhen').value = localIso(); $('#saQty').value = 1;
+  $('#saNote').value = ''; $('#saPay').value = 'cash';
+  delete $('#saPrice').dataset.touched;
+  saleCtxRefresh();
+  openM('#mSale');
+};
+$('#saVar').onchange = () => { delete $('#saPrice').dataset.touched; saleCtxRefresh(); };
+$('#saLoc').onchange = saleCtxRefresh;
+$('#saPrice').oninput = () => { $('#saPrice').dataset.touched = '1'; };
+$('#saGo').onclick = async () => {
+  const vid = $('#saVar').value, lid = $('#saLoc').value;
+  const qty = parseInt($('#saQty').value, 10);
+  const price = parseFloat($('#saPrice').value);
+  if(!vid || !lid){ showErr('#saErr','Vyberte zboží i místo prodeje.'); return; }
+  if(!qty || qty < 1){ showErr('#saErr','Zadejte počet prodaných kusů.'); return; }
+  const here = qtyOf(vid, lid);
+  if(qty > here){ showErr('#saErr',`Na místě „${locById(lid)?.name || '?'}“ je evidováno jen ${here} ks. Nejdřív zboží naskladněte nebo přesuňte.`); return; }
+  if(isNaN(price) || price < 0){ showErr('#saErr','Zadejte prodejní cenu za kus.'); return; }
+  const when = $('#saWhen').value ? new Date($('#saWhen').value).toISOString() : new Date().toISOString();
+  $('#saGo').disabled = true;
+  const {error} = await sb.rpc('record_sale', {
+    p_variant:vid, p_location:lid, p_qty:qty, p_unit_price:price,
+    p_payment:$('#saPay').value, p_sold_at:when, p_note:$('#saNote').value.trim() || null
+  });
+  $('#saGo').disabled = false;
+  if(error){ showErr('#saErr', error.message); return; }
+  closeM('#mSale'); toast(`Prodej zapsán · ${czk(qty*price)}`); await loadAll();
+};
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-sale-del]'); if(!b) return;
+  const s = S.sales.find(x => String(x.id) === b.dataset.saleDel); if(!s) return;
+  const v = varById(s.variant_id), i = v && itemById(v.item_id);
+  if(!confirm(`Stornovat prodej ${s.qty} ks „${i?.name || ''}“ za ${czk(s.qty*s.unit_price)}?\n\n` +
+              `Tržba se zruší a kusy se vrátí zpět na místo ${locById(s.location_id)?.name || ''}.`)) return;
+  const {error} = await sb.from('sales').delete().eq('id', s.id);
+  if(error){ toast('Storno se nezdařilo: ' + error.message, true); return; }
+  toast('Prodej stornován'); await loadAll();
+});
+
+/* ---------------------- obecný zápis pohybu --------------------------
+   Přesun mezi místy, příjem zboží a výdej v jednom dialogu. Omezení
+   v databázi hlídá, že u příjmu smí být vyplněn jen cíl a u výdeje jen
+   zdroj — proto se podle druhu pohybu obě pole skrývají a ukazují.
+   --------------------------------------------------------------------- */
+function addMoveRefresh(){
+  const t = $('#adType').value, vid = $('#adVar').value;
+  $('#adFromW').classList.toggle('hide', t === 'in');
+  $('#adToW').classList.toggle('hide', t === 'out');
+  const v = varById(vid), i = v && itemById(v.item_id);
+  $('#adAvail').innerHTML = !v ? '' :
+    `Současný stav — ` + S.locations.map(l => `${esc(l.name)}: <b>${qtyOf(vid, l.id)}</b>`).join(' · ');
+}
+$('#btnNewMove').onclick = () => {
+  if(!S.variants.length){ toast('Nejdřív založte zboží na skladě', true); return; }
+  showErr('#adErr','');
+  $('#adType').value = 'move'; $('#adQty').value = 1;
+  $('#adNote').value = ''; $('#adWhen').value = localIso();
+  if(S.locations[0]) $('#adFrom').value = S.locations[0].id;
+  if(S.locations[1]) $('#adTo').value = S.locations[1].id;
+  addMoveRefresh();
+  openM('#mAdd');
+};
+$('#adType').onchange = addMoveRefresh;
+$('#adVar').onchange = addMoveRefresh;
+$('#adGo').onclick = async () => {
+  const t = $('#adType').value, vid = $('#adVar').value;
+  const from = $('#adFrom').value, to = $('#adTo').value;
+  const qty = parseInt($('#adQty').value, 10);
+  if(!vid){ showErr('#adErr','Vyberte zboží.'); return; }
+  if(!qty || qty < 1){ showErr('#adErr','Zadejte počet kusů.'); return; }
+  const rec = {variant_id:vid, type:t, qty, note:$('#adNote').value.trim() || null,
+               author_id:S.user?.id || null, created_by:S.user?.email || null};
+  if($('#adWhen').value) rec.created_at = new Date($('#adWhen').value).toISOString();
+  if(t === 'move'){
+    if(from === to){ showErr('#adErr','Zdroj a cíl musí být různá místa.'); return; }
+    const avail = qtyOf(vid, from);
+    if(qty > avail){ showErr('#adErr',`Na místě „${locById(from)?.name || '?'}“ je evidováno jen ${avail} ks.`); return; }
+    rec.from_location_id = from; rec.to_location_id = to;
+  } else if(t === 'in'){
+    rec.to_location_id = to;
+  } else {
+    const avail = qtyOf(vid, from);
+    if(qty > avail){ showErr('#adErr',`Na místě „${locById(from)?.name || '?'}“ je evidováno jen ${avail} ks. Pro opravu evidence použijte inventuru u dané položky.`); return; }
+    rec.from_location_id = from;
+  }
+  $('#adGo').disabled = true;
+  const {error} = await sb.from('movements').insert(rec);
+  $('#adGo').disabled = false;
+  if(error){ showErr('#adErr', error.message); return; }
+  closeM('#mAdd');
+  toast(t === 'move' ? 'Zboží přesunuto' : t === 'in' ? 'Zboží naskladněno' : 'Výdej zapsán');
+  await loadAll();
 };
 
 /* ---------------------- položka: formulář --------------------------- */
@@ -1514,6 +1926,21 @@ $('#btnCsvMoves').onclick = () => {
       m.note||'', authorOf(m)]);
   });
   downloadCsv(`pohyby-merch-${new Date().toISOString().slice(0,10)}.csv`, rows);
+};
+$('#btnCsvSales').onclick = () => {
+  const rows = [['Datum','Položka','Varianta','Místo','Počet ks','Cena za kus','Tržba',
+                 'Nákupní cena za kus','Náklad celkem','Hrubá marže','Platba','Poznámka','Zapsal']];
+  S.sales.forEach(s => {
+    const v = varById(s.variant_id), i = v && itemById(v.item_id), c = saleCost(s);
+    const rev = s.qty * Number(s.unit_price);
+    rows.push([dt(s.sold_at), i?.name||'', v?.label||'', locById(s.location_id)?.name||'',
+      s.qty, Number(s.unit_price).toFixed(2), rev.toFixed(2),
+      c == null ? '' : Number(c).toFixed(2),
+      c == null ? '' : (c*s.qty).toFixed(2),
+      c == null ? '' : (rev - c*s.qty).toFixed(2),
+      PAY_LBL[s.payment] || s.payment, s.note||'', authorOf(s)]);
+  });
+  downloadCsv(`prodeje-merch-${new Date().toISOString().slice(0,10)}.csv`, rows);
 };
 $('#btnPrint').onclick = () => window.print();
 
