@@ -303,8 +303,8 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
           <thead><tr>
             <th>Místo</th><th class="num">Prodáno ks</th><th class="num">Tržby</th>
             <th class="num">Náklady prodaného zboží</th><th class="num">Hrubá marže</th>
-            <th class="num">Marže %</th><th class="num">Pořízeno na sklad</th>
-            <th class="num">Hodnota zásob</th>
+            <th class="num">Marže %</th><th class="num">Promo a repre</th>
+            <th class="num">Pořízeno na sklad</th><th class="num">Hodnota zásob</th>
           </tr></thead>
           <tbody id="tbodySalesSum"></tbody>
         </table>
@@ -316,6 +316,15 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
         do zásob vložené; co se z nich zatím neprodalo, drží <b>hodnota zásob</b> — ta je na rozdíl
         od ostatních sloupců stavem k dnešku, obdobím se tedy nefiltruje. Záporný rozdíl mezi
         pořízením a tržbou sám o sobě neznamená ztrátu, jen peníze zatím vázané ve zboží.
+      </p>
+      <p class="small muted" style="margin:-14px 0 22px">
+        <b>Promo a repre</b> jsou bezúplatné výdeje — zboží ze skladu odešlo, ale tržba
+        nevznikla, takže se do tržeb ani do marže nepočítá a vyčísluje se pořizovací cenou.
+        Rozlišení není kosmetické: <b>promo</b> (reklamní předmět s logem do 500 Kč bez DPH)
+        je podle § 25 odst. 1 písm. t) zákona o daních z příjmů daňově uznatelný náklad,
+        kdežto <b>repre</b> (dary a reprezentace nad tento limit) uznatelná není a u DPH
+        se k ní navíc váže odvod na výstupu. Zatřiďte proto každý výdej hned při zápisu —
+        účetní to na konci roku převezme bez dohadování.
       </p>
 
       <div class="toolbar">
@@ -576,12 +585,14 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
 <!-- zápis prodeje -->
 <div class="overlay" id="mSale">
   <div class="modal" style="max-width:560px">
-    <div class="modal-h"><h3>Zápis prodeje</h3><button class="x" data-close>&times;</button></div>
+    <div class="modal-h"><h3>Zápis prodeje nebo výdeje</h3><button class="x" data-close>&times;</button></div>
     <div class="modal-b">
       <p class="small muted" style="margin-top:0">
         Prodej se zapíše spolu s výdejem ze skladu v jediném kroku — tržba tedy
         nikdy nevznikne bez úbytku zásoby. Ceny se zapsáním zamrazí, pozdější
-        změna ceníku už dosažené tržby nepřepíše.
+        změna ceníku už dosažené tržby nepřepíše. Stejnou cestou se eviduje
+        i zboží rozdané na marketing nebo darované sponzorovi — v roletce
+        <b>Platba / důvod výdeje</b> zvolte promo nebo repre.
       </p>
       <div class="row2">
         <label class="fld"><span>Místo prodeje *</span><select id="saLoc"></select></label>
@@ -592,21 +603,34 @@ footer{max-width:1400px;margin:0 auto;padding:10px 20px 36px;color:var(--muted);
       <div class="row3">
         <label class="fld"><span>Počet kusů *</span><input id="saQty" type="number" min="1" step="1" value="1"></label>
         <label class="fld"><span>Cena za kus (Kč) *</span><input id="saPrice" type="number" min="0" step="1"></label>
-        <label class="fld"><span>Platba</span>
+        <label class="fld"><span>Platba / důvod výdeje</span>
           <select id="saPay">
-            <option value="cash">Hotově</option>
-            <option value="card">Kartou</option>
-            <option value="transfer">Převodem</option>
-            <option value="other">Jinak</option>
+            <optgroup label="Prodej">
+              <option value="cash">Hotově</option>
+              <option value="card">Kartou</option>
+              <option value="transfer">Převodem</option>
+              <option value="other">Jinak</option>
+            </optgroup>
+            <optgroup label="Bezúplatný výdej">
+              <option value="promo">Promo – reklamní předmět</option>
+              <option value="repre">Repre – dar, reprezentace</option>
+            </optgroup>
           </select></label>
       </div>
+      <p id="saFreeHint" class="small hide"
+         style="margin:-8px 0 12px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa">
+        <b>Bezúplatný výdej.</b> Zboží se odepíše ze skladu, ale nevznikne tržba —
+        cena je proto napevno 0 Kč. V přehledu se tyto kusy nepočítají do tržeb ani
+        do marže, vedou se zvlášť jako pořizovací náklad rozdaného zboží.
+        <span id="saFreeTax"></span>
+      </p>
       <label class="fld"><span>Poznámka</span>
         <input id="saNote" placeholder="např. zápas s Pardubicemi, stánek u vstupu"></label>
       <div id="saErr" class="alert alert-err hide small"></div>
     </div>
     <div class="modal-f">
       <button data-close>Zrušit</button>
-      <button class="btn-primary" id="saGo">Zapsat prodej</button>
+      <button class="btn-primary" id="saGo">Zapsat</button>
     </div>
   </div>
 </div>
@@ -1164,7 +1188,11 @@ function renderMoves(){
    zpětně hned, jak Aleš ceny doplní. Dokud chybí, je marže nadhodnocená
    a aplikace to musí říct nahlas — proto počítadlo neúplných prodejů.
    --------------------------------------------------------------------- */
-const PAY_LBL = {cash:'hotově', card:'kartou', transfer:'převodem', other:'jinak'};
+const PAY_LBL = {cash:'hotově', card:'kartou', transfer:'převodem', other:'jinak',
+                 promo:'promo – reklama', repre:'repre – dar'};
+/* bezúplatné výdeje: ze skladu odcházejí, do tržeb nepatří */
+const FREE_PAY = ['promo','repre'];
+const isFree = s => FREE_PAY.includes(s.payment);
 function costOfVariant(vid){
   const v = varById(vid), i = v && itemById(v.item_id);
   return i?.purchase_price ?? null;
@@ -1189,9 +1217,15 @@ function renderSales(){
 
   // ---- souhrn po místech -------------------------------------------
   const agg = {};
-  const box = id => agg[id] || (agg[id] = {pieces:0, revenue:0, cogs:0, bought:0, stockVal:0, unknown:0});
+  const box = id => agg[id] || (agg[id] = {pieces:0, revenue:0, cogs:0, bought:0,
+                                           stockVal:0, unknown:0, freePc:0, freeCost:0});
   sales.forEach(s => {
     const a = box(s.location_id), c = saleCost(s);
+    if(isFree(s)){                       // promo a repre: úbytek zásoby, ne tržba
+      a.freePc += s.qty;
+      if(c == null) a.unknown++; else a.freeCost += s.qty * c;
+      return;
+    }
     a.pieces  += s.qty;
     a.revenue += s.qty * Number(s.unit_price);
     if(c == null) a.unknown++; else a.cogs += s.qty * c;
@@ -1209,10 +1243,12 @@ function renderSales(){
   });
 
   const locs = S.locations.filter(l => fLoc === 'all' || l.id === fLoc);
-  let tP=0, tR=0, tC=0, tB=0, tS=0, tU=0;
+  let tP=0, tR=0, tC=0, tB=0, tS=0, tU=0, tFP=0, tFC=0;
   const rows = locs.map(l => {
-    const a = agg[l.id] || {pieces:0, revenue:0, cogs:0, bought:0, stockVal:0, unknown:0};
-    tP+=a.pieces; tR+=a.revenue; tC+=a.cogs; tB+=a.bought; tS+=a.stockVal; tU+=a.unknown;
+    const a = agg[l.id] || {pieces:0, revenue:0, cogs:0, bought:0, stockVal:0,
+                            unknown:0, freePc:0, freeCost:0};
+    tP+=a.pieces; tR+=a.revenue; tC+=a.cogs; tB+=a.bought; tS+=a.stockVal;
+    tU+=a.unknown; tFP+=a.freePc; tFC+=a.freeCost;
     const marg = a.revenue - a.cogs;
     const pct  = a.revenue ? Math.round(marg / a.revenue * 100) : null;
     return `<tr>
@@ -1222,6 +1258,7 @@ function renderSales(){
       <td class="num">${a.cogs ? czk(a.cogs) : '—'}</td>
       <td class="num" style="${marg<0?'color:var(--danger)':''}">${a.revenue ? czk(marg) : '—'}</td>
       <td class="num">${pct == null ? '—' : pct + ' %'}</td>
+      <td class="num">${a.freePc ? num(a.freePc) + ' ks · ' + czk(a.freeCost) : '—'}</td>
       <td class="num">${a.bought ? czk(a.bought) : '—'}</td>
       <td class="num">${a.stockVal ? czk(a.stockVal) : '—'}</td>
     </tr>`;
@@ -1231,16 +1268,23 @@ function renderSales(){
       <td>Celkem</td><td class="num">${num(tP)}</td><td class="num">${czk(tR)}</td>
       <td class="num">${czk(tC)}</td><td class="num">${czk(tM)}</td>
       <td class="num">${tPct == null ? '—' : tPct + ' %'}</td>
+      <td class="num">${tFP ? num(tFP) + ' ks · ' + czk(tFC) : '—'}</td>
       <td class="num">${czk(tB)}</td><td class="num">${czk(tS)}</td></tr>`);
   $('#tbodySalesSum').innerHTML = rows.join('');
 
+  const nSold = sales.filter(s => !isFree(s)).length;
+  const freeSplit = FREE_PAY.map(p => {
+    const ks = sales.filter(s => s.payment === p).reduce((a,s) => a + s.qty, 0);
+    return ks ? num(ks) + ' ks ' + (p === 'promo' ? 'promo' : 'repre') : null;
+  }).filter(Boolean).join(' · ');
+
   $('#salesStats').innerHTML = `
     <div class="stat"><div class="k">Tržby</div><div class="v">${czk(tR)}</div>
-      <div class="s">${num(tP)} ks · ${num(sales.length)} prodejů</div></div>
+      <div class="s">${num(tP)} ks · ${num(nSold)} prodejů</div></div>
     <div class="stat"><div class="k">Hrubá marže</div><div class="v">${czk(tM)}</div>
       <div class="s">${tPct == null ? 'zatím bez prodeje' : tPct + ' % z tržeb'}</div></div>
-    <div class="stat"><div class="k">Pořízeno na sklad</div><div class="v">${czk(tB)}</div>
-      <div class="s">vloženo do zásob za období</div></div>
+    <div class="stat"><div class="k">Promo a repre</div><div class="v">${czk(tFC)}</div>
+      <div class="s">${tFP ? freeSplit : 'žádný bezúplatný výdej'}</div></div>
     <div class="stat"><div class="k">Hodnota zásob</div><div class="v">${czk(tS)}</div>
       <div class="s">dosud neprodané zboží</div></div>`;
 
@@ -1266,16 +1310,21 @@ function renderSales(){
     const v = varById(s.variant_id), i = v && itemById(v.item_id), c = saleCost(s);
     const rev = s.qty * Number(s.unit_price);
     const mar = c == null ? null : rev - s.qty * c;
+    const fr = isFree(s);
     return `<tr>
       <td class="small">${dt(s.sold_at)}</td>
       <td>${esc(i?.name || '—')}</td>
       <td>${esc(v?.label || '')}</td>
       <td class="small">${esc(locById(s.location_id)?.name || '—')}</td>
       <td class="num">${s.qty}</td>
-      <td class="num small">${czk(s.unit_price)}</td>
-      <td class="num"><b>${czk(rev)}</b></td>
-      <td class="num small ${mar == null ? 'muted' : ''}">${mar == null ? 'bez nákupní ceny' : czk(mar)}</td>
-      <td class="small muted">${PAY_LBL[s.payment] || s.payment}</td>
+      <td class="num small">${fr ? '—' : czk(s.unit_price)}</td>
+      <td class="num">${fr ? '<span class="small muted">bez tržby</span>' : `<b>${czk(rev)}</b>`}</td>
+      <td class="num small ${mar == null ? 'muted' : ''}">${
+        mar == null ? 'bez nákupní ceny'
+        : fr ? `<span title="pořizovací cena rozdaného zboží">náklad ${czk(-mar)}</span>`
+        : czk(mar)}</td>
+      <td class="small">${fr ? `<span class="pill pill-warn">${PAY_LBL[s.payment]}</span>`
+                             : `<span class="muted">${PAY_LBL[s.payment] || s.payment}</span>`}</td>
       <td class="small muted">${esc(s.note || '')}</td>
       <td class="small muted">${esc(authorOf(s))}</td>
       <td class="num">${adm ? `<button class="btn-sm btn-danger" data-sale-del="${s.id}" title="Storno vrátí kusy zpět na sklad">Storno</button>` : ''}</td>
@@ -1588,44 +1637,82 @@ function saleCtxRefresh(){
     S.locations.filter(l => l.id !== lid).map(l => `${esc(l.name)}: ${qtyOf(vid, l.id)}`).join(' · ') +
     (i?.purchase_price != null ? ` · nákupní cena ${czk(i.purchase_price)}` : ' · nákupní cena zatím nevyplněná');
   if(i?.sale_price != null && !$('#saPrice').dataset.touched) $('#saPrice').value = i.sale_price;
+  salePayRefresh();
+}
+/* promo a repre jsou bezúplatné výdeje — cena se uzamkne na nule
+   a modal rovnou napoví, co to znamená daňově */
+function salePayRefresh(){
+  const pay = $('#saPay').value, free = FREE_PAY.includes(pay);
+  const price = $('#saPrice'), hint = $('#saFreeHint');
+  price.disabled = free;
+  if(free){
+    if(price.dataset.prev == null) price.dataset.prev = price.value;
+    price.value = 0;
+    hint.classList.remove('hide');
+    const v = varById($('#saVar').value), i = v && itemById(v.item_id);
+    const sp = i?.sale_price;
+    $('#saFreeTax').innerHTML = pay === 'promo'
+      ? 'Jako <b>promo</b> obstojí reklamní předmět s logem do 500 Kč bez DPH — ' +
+        'ten je daňově uznatelný.' +
+        (sp != null && sp > 500 ? ` Pozor: prodejní cena této položky je ${czk(sp)}, ` +
+          'takže pokud je i pořizovací cena nad 500 Kč bez DPH, patří výdej spíš pod repre.' : '')
+      : '<b>Repre</b> (dary a reprezentace) je daňově neuznatelný náklad a u DPH se k ní ' +
+        'obvykle váže odvod na výstupu. Do poznámky napište, komu a proč zboží šlo.';
+  } else {
+    hint.classList.add('hide');
+    if(price.dataset.prev != null){ price.value = price.dataset.prev; delete price.dataset.prev; }
+  }
 }
 $('#btnNewSale').onclick = () => {
   if(!S.variants.length){ toast('Nejdřív založte zboží na skladě', true); return; }
   showErr('#saErr','');
   $('#saWhen').value = localIso(); $('#saQty').value = 1;
   $('#saNote').value = ''; $('#saPay').value = 'cash';
-  delete $('#saPrice').dataset.touched;
+  delete $('#saPrice').dataset.touched; delete $('#saPrice').dataset.prev;
   saleCtxRefresh();
   openM('#mSale');
 };
 $('#saVar').onchange = () => { delete $('#saPrice').dataset.touched; saleCtxRefresh(); };
 $('#saLoc').onchange = saleCtxRefresh;
+$('#saPay').onchange = salePayRefresh;
 $('#saPrice').oninput = () => { $('#saPrice').dataset.touched = '1'; };
 $('#saGo').onclick = async () => {
   const vid = $('#saVar').value, lid = $('#saLoc').value;
   const qty = parseInt($('#saQty').value, 10);
-  const price = parseFloat($('#saPrice').value);
+  const pay = $('#saPay').value, free = FREE_PAY.includes(pay);
+  const price = free ? 0 : parseFloat($('#saPrice').value);
   if(!vid || !lid){ showErr('#saErr','Vyberte zboží i místo prodeje.'); return; }
   if(!qty || qty < 1){ showErr('#saErr','Zadejte počet prodaných kusů.'); return; }
   const here = qtyOf(vid, lid);
   if(qty > here){ showErr('#saErr',`Na místě „${locById(lid)?.name || '?'}“ je evidováno jen ${here} ks. Nejdřív zboží naskladněte nebo přesuňte.`); return; }
   if(isNaN(price) || price < 0){ showErr('#saErr','Zadejte prodejní cenu za kus.'); return; }
   const when = $('#saWhen').value ? new Date($('#saWhen').value).toISOString() : new Date().toISOString();
+  // u bezúplatného výdeje ať je i v Pohybech hned vidět, že nešlo o prodej
+  const note = $('#saNote').value.trim() ||
+    (pay === 'promo' ? 'promo – reklamní předmět'
+     : pay === 'repre' ? 'repre – dar / reprezentace' : null);
   $('#saGo').disabled = true;
   const {error} = await sb.rpc('record_sale', {
     p_variant:vid, p_location:lid, p_qty:qty, p_unit_price:price,
-    p_payment:$('#saPay').value, p_sold_at:when, p_note:$('#saNote').value.trim() || null
+    p_payment:pay, p_sold_at:when, p_note:note
   });
   $('#saGo').disabled = false;
   if(error){ showErr('#saErr', error.message); return; }
-  closeM('#mSale'); toast(`Prodej zapsán · ${czk(qty*price)}`); await loadAll();
+  closeM('#mSale');
+  toast(free ? `${PAY_LBL[pay]} · ${qty} ks vydáno ze skladu, bez tržby`
+             : `Prodej zapsán · ${czk(qty*price)}`);
+  await loadAll();
 };
 document.addEventListener('click', async e => {
   const b = e.target.closest('[data-sale-del]'); if(!b) return;
   const s = S.sales.find(x => String(x.id) === b.dataset.saleDel); if(!s) return;
   const v = varById(s.variant_id), i = v && itemById(v.item_id);
-  if(!confirm(`Stornovat prodej ${s.qty} ks „${i?.name || ''}“ za ${czk(s.qty*s.unit_price)}?\n\n` +
-              `Tržba se zruší a kusy se vrátí zpět na místo ${locById(s.location_id)?.name || ''}.`)) return;
+  const fr = isFree(s);
+  if(!confirm(fr
+      ? `Stornovat výdej ${s.qty} ks „${i?.name || ''}“ (${PAY_LBL[s.payment]})?\n\n` +
+        `Kusy se vrátí zpět na místo ${locById(s.location_id)?.name || ''}.`
+      : `Stornovat prodej ${s.qty} ks „${i?.name || ''}“ za ${czk(s.qty*s.unit_price)}?\n\n` +
+        `Tržba se zruší a kusy se vrátí zpět na místo ${locById(s.location_id)?.name || ''}.`)) return;
   const {error} = await sb.from('sales').delete().eq('id', s.id);
   if(error){ toast('Storno se nezdařilo: ' + error.message, true); return; }
   toast('Prodej stornován'); await loadAll();
@@ -1928,12 +2015,16 @@ $('#btnCsvMoves').onclick = () => {
   downloadCsv(`pohyby-merch-${new Date().toISOString().slice(0,10)}.csv`, rows);
 };
 $('#btnCsvSales').onclick = () => {
-  const rows = [['Datum','Položka','Varianta','Místo','Počet ks','Cena za kus','Tržba',
+  const rows = [['Datum','Druh','Položka','Varianta','Místo','Počet ks','Cena za kus','Tržba',
                  'Nákupní cena za kus','Náklad celkem','Hrubá marže','Platba','Poznámka','Zapsal']];
   S.sales.forEach(s => {
     const v = varById(s.variant_id), i = v && itemById(v.item_id), c = saleCost(s);
     const rev = s.qty * Number(s.unit_price);
-    rows.push([dt(s.sold_at), i?.name||'', v?.label||'', locById(s.location_id)?.name||'',
+    // „Druh“ je sloupec pro účetní: prodej patří do výnosů, promo do daňově
+    // uznatelné reklamy, repre do neuznatelných nákladů
+    const kind = s.payment === 'promo' ? 'promo (reklama)'
+               : s.payment === 'repre' ? 'repre (dar)' : 'prodej';
+    rows.push([dt(s.sold_at), kind, i?.name||'', v?.label||'', locById(s.location_id)?.name||'',
       s.qty, Number(s.unit_price).toFixed(2), rev.toFixed(2),
       c == null ? '' : Number(c).toFixed(2),
       c == null ? '' : (c*s.qty).toFixed(2),
